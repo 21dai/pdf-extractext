@@ -1,6 +1,10 @@
-def main():
-    print("Hello from pdf-extractext!")
+"""Application entry point"""
 
+import uvicorn
+from app.main import create_app
+from app.config import settings
+
+app = create_app()
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host=settings.host, port=settings.port, reload=settings.debug)
