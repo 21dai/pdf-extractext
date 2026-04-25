@@ -8,11 +8,11 @@ from app.schemas import DocumentCreate, DocumentUpdate, DocumentResponse
 from app.services import DocumentService
 from app.utils.database import get_db
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(prefix="/documents", tags=["documentos"])
 
 
 def get_document_service(db: Session = Depends(get_db)) -> DocumentService:
-    """Dependency to get document service"""
+    """Dependencia para obtener el servicio de documentos."""
     return DocumentService(db)
 
 
@@ -20,21 +20,21 @@ def get_document_service(db: Session = Depends(get_db)) -> DocumentService:
     "",
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new document",
+    summary="Crear un nuevo documento",
 )
 async def create_document(
     document_data: DocumentCreate,
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
-    Create a new document
+    Crear un nuevo documento.
 
     Args:
-        document_data: Document creation data
-        service: Document service
+        document_data: Datos del documento a crear
+        service: Servicio de documentos
 
     Returns:
-        Created document
+        Documento creado
     """
     try:
         return service.create_document(document_data)
@@ -42,44 +42,48 @@ async def create_document(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("", response_model=List[DocumentResponse], summary="List all documents")
+@router.get(
+    "", response_model=List[DocumentResponse], summary="Listar todos los documentos"
+)
 async def list_documents(
     skip: int = 0,
     limit: int = 10,
     service: DocumentService = Depends(get_document_service),
 ) -> List[DocumentResponse]:
     """
-    List all documents with pagination
+    Listar todos los documentos con paginacion.
 
     Args:
-        skip: Number of records to skip
-        limit: Maximum number of records
-        service: Document service
+        skip: Cantidad de registros a omitir
+        limit: Cantidad maxima de registros
+        service: Servicio de documentos
 
     Returns:
-        List of documents
+        Lista de documentos
     """
     return service.get_all_documents(skip, limit)
 
 
 @router.get(
-    "/{document_id}", response_model=DocumentResponse, summary="Get a document by ID"
+    "/{document_id}",
+    response_model=DocumentResponse,
+    summary="Obtener un documento por ID",
 )
 async def get_document(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
     """
-    Get a document by ID
+    Obtener un documento por su ID.
 
     Args:
-        document_id: Document ID
-        service: Document service
+        document_id: ID del documento
+        service: Servicio de documentos
 
     Returns:
-        Document details
+        Detalle del documento
 
     Raises:
-        HTTPException: If document not found
+        HTTPException: Si el documento no existe
     """
     document = service.get_document(document_id)
     if not document:
@@ -91,7 +95,9 @@ async def get_document(
 
 
 @router.put(
-    "/{document_id}", response_model=DocumentResponse, summary="Update a document"
+    "/{document_id}",
+    response_model=DocumentResponse,
+    summary="Actualizar un documento",
 )
 async def update_document(
     document_id: int,
@@ -99,18 +105,18 @@ async def update_document(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
-    Update a document
+    Actualizar un documento.
 
     Args:
-        document_id: Document ID
-        document_data: Document update data
-        service: Document service
+        document_id: ID del documento
+        document_data: Datos del documento a actualizar
+        service: Servicio de documentos
 
     Returns:
-        Updated document
+        Documento actualizado
 
     Raises:
-        HTTPException: If document not found
+        HTTPException: Si el documento no existe
     """
     document = service.update_document(document_id, document_data)
     if not document:
@@ -124,20 +130,20 @@ async def update_document(
 @router.delete(
     "/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a document",
+    summary="Eliminar un documento",
 )
 async def delete_document(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ):
     """
-    Delete a document
+    Eliminar un documento.
 
     Args:
-        document_id: Document ID
-        service: Document service
+        document_id: ID del documento
+        service: Servicio de documentos
 
     Raises:
-        HTTPException: If document not found
+        HTTPException: Si el documento no existe
     """
     success = service.delete_document(document_id)
     if not success:
@@ -150,23 +156,23 @@ async def delete_document(
 @router.post(
     "/{document_id}/extract",
     response_model=DocumentResponse,
-    summary="Extract text from document",
+    summary="Extraer texto de un documento",
 )
 async def extract_text(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
     """
-    Extract text from a PDF document
+    Extraer texto real de un documento PDF.
 
     Args:
-        document_id: Document ID
-        service: Document service
+        document_id: ID del documento
+        service: Servicio de documentos
 
     Returns:
-        Document with extracted text
+        Documento con el texto extraido
 
     Raises:
-        HTTPException: If document not found or extraction fails
+        HTTPException: Si el documento no existe o falla la extraccion
     """
     try:
         document = service.extract_text(document_id)

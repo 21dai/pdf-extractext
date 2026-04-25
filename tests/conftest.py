@@ -3,6 +3,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -13,19 +14,20 @@ from app.utils.database import get_db
 @pytest.fixture(scope="function")
 def db():
     """Create test database"""
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = SessionLocal(bind=connection)
+    session = SessionLocal()
 
     yield session
 
     session.close()
-    transaction.rollback()
-    connection.close()
+    Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope="function")

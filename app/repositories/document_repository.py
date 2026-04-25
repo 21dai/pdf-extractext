@@ -69,6 +69,30 @@ class DocumentRepository:
         """
         return self.session.query(Document).filter(Document.name == name).first()
 
+    def get_by_file_path(self, file_path: str) -> Optional[Document]:
+        """
+        Get document by file path.
+
+        Args:
+            file_path: Document file path
+
+        Returns:
+            Document if found, None otherwise
+        """
+        return self.session.query(Document).filter(Document.file_path == file_path).first()
+
+    def get_by_checksum(self, checksum: str) -> Optional[Document]:
+        """
+        Get document by checksum.
+
+        Args:
+            checksum: SHA-256 checksum of the file
+
+        Returns:
+            Document if found, None otherwise
+        """
+        return self.session.query(Document).filter(Document.checksum == checksum).first()
+
     def update(self, document_id: int, data: dict) -> Optional[Document]:
         """
         Update document

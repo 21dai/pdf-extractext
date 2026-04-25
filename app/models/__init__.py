@@ -1,5 +1,5 @@
-"""Database models"""
+"""Database models."""
 
-from .document import Document
+from .document import Base, Document
 
-__all__ = ["Document"]
+__all__ = ["Base", "Document"]

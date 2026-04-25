@@ -15,6 +15,7 @@ class Document(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     file_path = Column(String(500), nullable=False, unique=True)
+    checksum = Column(String(64), nullable=False, unique=True, index=True)
     file_size = Column(Integer, nullable=False)
     extracted_text = Column(String, nullable=True)
     is_processed = Column(Boolean, default=False)

@@ -1,5 +1,5 @@
-"""Configuration module"""
+"""Configuration module."""
 
-from .settings import Settings
+from .settings import Settings, settings
 
-__all__ = ["Settings"]
+__all__ = ["Settings", "settings"]
