@@ -1,17 +1,18 @@
-"""Document API endpoints"""
+"""Document API endpoints."""
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from typing import Any
 
-from app.schemas import DocumentCreate, DocumentUpdate, DocumentResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+
+from app.schemas import DocumentResponse, DocumentUpdate
 from app.services import DocumentService
 from app.utils.database import get_db
 
 router = APIRouter(prefix="/documents", tags=["documentos"])
 
 
-def get_document_service(db: Session = Depends(get_db)) -> DocumentService:
+def get_document_service(db: Any = Depends(get_db)) -> DocumentService:
     """Dependencia para obtener el servicio de documentos."""
     return DocumentService(db)
 
@@ -20,26 +21,32 @@ def get_document_service(db: Session = Depends(get_db)) -> DocumentService:
     "",
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Crear un nuevo documento",
+    summary="Crear y procesar un nuevo documento",
 )
 async def create_document(
-    document_data: DocumentCreate,
+    name: str = Form(..., description="Nombre del documento"),
+    file: UploadFile = File(..., description="Archivo PDF a registrar"),
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """
-    Crear un nuevo documento.
+    Crear un nuevo documento a partir de un archivo PDF subido.
+    El PDF se valida y se procesa completamente en memoria.
 
     Args:
-        document_data: Datos del documento a crear
+        name: Nombre del documento
+        file: Archivo PDF subido por el cliente
         service: Servicio de documentos
 
     Returns:
         Documento creado
     """
     try:
-        return service.create_document(document_data)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        file_content = await file.read()
+        return service.create_document(name, file.filename, file_content)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    finally:
+        await file.close()
 
 
 @router.get(
@@ -118,13 +125,16 @@ async def update_document(
     Raises:
         HTTPException: Si el documento no existe
     """
-    document = service.update_document(document_id, document_data)
-    if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document {document_id} not found",
-        )
-    return document
+    try:
+        document = service.update_document(document_id, document_data)
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document {document_id} not found",
+            )
+        return document
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.delete(
@@ -156,13 +166,14 @@ async def delete_document(
 @router.post(
     "/{document_id}/extract",
     response_model=DocumentResponse,
-    summary="Extraer texto de un documento",
+    summary="Obtener o completar el texto extraido de un documento",
 )
 async def extract_text(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
     """
-    Extraer texto real de un documento PDF.
+    Obtener el texto real de un documento PDF.
+    Si el documento ya fue procesado en memoria, devuelve el resultado almacenado.
 
     Args:
         document_id: ID del documento
@@ -182,5 +193,5 @@ async def extract_text(
                 detail=f"Document {document_id} not found",
             )
         return document
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

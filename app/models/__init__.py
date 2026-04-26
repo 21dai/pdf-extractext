@@ -1,5 +1,5 @@
-"""Database models."""
+"""Application models."""
 
-from .document import Base, Document
+from .document import Document, utcnow
 
-__all__ = ["Base", "Document"]
+__all__ = ["Document", "utcnow"]

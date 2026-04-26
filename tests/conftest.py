@@ -1,42 +1,31 @@
-"""Pytest configuration and fixtures"""
+"""Pytest configuration and fixtures."""
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import create_app
-from app.models import Base
-from app.utils.database import get_db
+from app.utils.database import create_tables, drop_tables, get_database, reset_client
 
 
 @pytest.fixture(scope="function")
-def db():
-    """Create test database"""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
+def db(monkeypatch):
+    """Create an isolated Mongo-like database for tests."""
+    monkeypatch.setattr(settings, "database_url", "mongomock://localhost")
+    monkeypatch.setattr(settings, "database_name", "pdf_extract_test")
+    reset_client()
+    create_tables()
 
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    session = SessionLocal()
+    yield get_database()
 
-    yield session
-
-    session.close()
-    Base.metadata.drop_all(bind=engine)
+    drop_tables()
+    reset_client()
 
 
 @pytest.fixture(scope="function")
 def client(db):
-    """Create test client"""
+    """Create test client using the isolated test database."""
     app = create_app()
 
-    def override_get_db():
-        yield db
-
-    app.dependency_overrides[get_db] = override_get_db
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client

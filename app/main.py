@@ -1,35 +1,35 @@
-"""FastAPI application factory"""
+"""FastAPI application factory."""
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from typing import Any
+
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
 from app.api import document_router
-from app.utils.database import create_tables
+from app.config import settings
+from app.utils.database import create_tables, get_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifespan context manager for startup and shutdown events
+    Manage startup and shutdown events for the FastAPI application.
 
     Args:
         app: FastAPI application
     """
-    # Startup
     create_tables()
-    print(f"✓ {settings.app_name} started successfully")
+    print(f"[OK] {settings.app_name} started successfully")
 
     yield
 
-    # Shutdown
-    print(f"✓ {settings.app_name} shutdown")
+    print(f"[OK] {settings.app_name} shutdown")
 
 
 def create_app() -> FastAPI:
     """
-    Create and configure FastAPI application
+    Create and configure the FastAPI application.
 
     Returns:
         Configured FastAPI application
@@ -45,7 +45,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -54,10 +53,8 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Include routers
     app.include_router(document_router, prefix=settings.api_v1_prefix)
 
-    # Root endpoint
     @app.get("/", tags=["inicio"], summary="Ver informacion basica de la API")
     async def root():
         """Mostrar informacion general de la API."""
@@ -65,6 +62,25 @@ def create_app() -> FastAPI:
             "message": f"Bienvenido a {settings.app_name}",
             "version": settings.app_version,
             "docs": settings.api_docs_url,
+            "database": "mongodb",
+            "database_name": settings.database_name,
+        }
+
+    @app.get("/health", tags=["inicio"], summary="Verificar estado de la API")
+    async def health(db: Any = Depends(get_db)):
+        """Verificar que la API y MongoDB esten disponibles."""
+        try:
+            db.command("ping")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database unavailable",
+            ) from exc
+
+        return {
+            "status": "ok",
+            "database": "mongodb",
+            "database_name": settings.database_name,
         }
 
     return app

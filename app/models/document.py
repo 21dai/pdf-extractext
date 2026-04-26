@@ -1,23 +1,25 @@
-"""Document database model"""
+"""Document domain model."""
 
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+from datetime import UTC, datetime
 
-Base = declarative_base()
+from pydantic import BaseModel, Field
 
 
-class Document(Base):
-    """Document database model"""
+def utcnow() -> datetime:
+    """Return a timezone-aware UTC timestamp."""
+    return datetime.now(UTC)
 
-    __tablename__ = "documents"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False, index=True)
-    file_path = Column(String(500), nullable=False, unique=True)
-    checksum = Column(String(64), nullable=False, unique=True, index=True)
-    file_size = Column(Integer, nullable=False)
-    extracted_text = Column(String, nullable=True)
-    is_processed = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+class Document(BaseModel):
+    """Document representation persisted in the document database."""
+
+    id: int | None = Field(default=None)
+    name: str
+    original_filename: str | None = Field(default=None)
+    file_path: str
+    checksum: str
+    file_size: int
+    extracted_text: str | None = Field(default=None)
+    is_processed: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

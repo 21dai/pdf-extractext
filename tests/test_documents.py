@@ -1,9 +1,9 @@
-"""Tests for document endpoints"""
+"""Tests for document endpoints."""
 
 import hashlib
-from pathlib import Path
 
 from fastapi.testclient import TestClient
+
 from app.config import settings
 
 
@@ -60,268 +60,245 @@ def build_pdf_bytes(text: str = DEFAULT_PDF_TEXT) -> bytes:
 MINIMAL_PDF_BYTES = build_pdf_bytes()
 
 
-def create_pdf_file(tmp_path, name: str = "test.pdf", content: bytes = MINIMAL_PDF_BYTES):
-    """Create a minimal PDF-like test file and return its path."""
-    test_file = tmp_path / name
-    test_file.write_bytes(content)
-    return test_file
-
-
 def pdf_checksum(content: bytes = MINIMAL_PDF_BYTES) -> str:
     """Return the expected SHA-256 checksum for the given PDF bytes."""
     return hashlib.sha256(content).hexdigest()
 
 
+def create_upload_payload(
+    name: str = "Test Document",
+    filename: str = "test.pdf",
+    content: bytes = MINIMAL_PDF_BYTES,
+    content_type: str = "application/pdf",
+):
+    """Build multipart request data for document uploads."""
+    return (
+        {"name": name},
+        {"file": (filename, content, content_type)},
+    )
+
+
 def test_list_documents_empty(client: TestClient):
-    """Test listing documents when empty"""
+    """Test listing documents when empty."""
     response = client.get("/api/v1/documents")
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_create_document(client: TestClient, tmp_path):
-    """Test creating a document"""
-    test_file = create_pdf_file(tmp_path)
+def test_health_endpoint(client: TestClient):
+    """Test application health endpoint."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["database"] == "mongodb"
 
-    payload = {
-        "name": "Test Document",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
 
-    response = client.post("/api/v1/documents", json=payload)
+def test_create_document(client: TestClient):
+    """Test creating a document from an uploaded PDF."""
+    data, files = create_upload_payload()
+    response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 201
 
-    data = response.json()
-    assert data["name"] == "Test Document"
-    assert data["checksum"] == pdf_checksum()
-    assert data["is_processed"] is False
-    assert "id" in data
+    document = response.json()
+    assert document["name"] == "Test Document"
+    assert document["original_filename"] == "test.pdf"
+    assert document["checksum"] == pdf_checksum()
+    assert document["file_size"] == len(MINIMAL_PDF_BYTES)
+    assert document["is_processed"] is True
+    assert document["extracted_text"] == DEFAULT_PDF_TEXT
+    assert "file_path" not in document
+    assert "id" in document
 
 
-def test_get_document(client: TestClient, tmp_path):
-    """Test getting a document by ID"""
-    test_file = create_pdf_file(tmp_path)
-
-    payload = {
-        "name": "Test Document",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
-    create_response = client.post("/api/v1/documents", json=payload)
+def test_get_document(client: TestClient):
+    """Test getting a document by ID."""
+    data, files = create_upload_payload()
+    create_response = client.post("/api/v1/documents", data=data, files=files)
     document_id = create_response.json()["id"]
 
-    # Get the document
     response = client.get(f"/api/v1/documents/{document_id}")
     assert response.status_code == 200
 
-    data = response.json()
-    assert data["id"] == document_id
-    assert data["name"] == "Test Document"
-    assert data["checksum"] == pdf_checksum()
+    document = response.json()
+    assert document["id"] == document_id
+    assert document["name"] == "Test Document"
+    assert document["original_filename"] == "test.pdf"
+    assert document["checksum"] == pdf_checksum()
 
 
 def test_get_nonexistent_document(client: TestClient):
-    """Test getting a non-existent document"""
+    """Test getting a non-existent document."""
     response = client.get("/api/v1/documents/999")
     assert response.status_code == 404
 
 
-def test_update_document(client: TestClient, tmp_path):
-    """Test updating a document"""
-    test_file = create_pdf_file(tmp_path)
-
-    payload = {
-        "name": "Test Document",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
-    create_response = client.post("/api/v1/documents", json=payload)
+def test_update_document(client: TestClient):
+    """Test updating a document."""
+    data, files = create_upload_payload()
+    create_response = client.post("/api/v1/documents", data=data, files=files)
     document_id = create_response.json()["id"]
 
-    # Update the document
     update_payload = {"name": "Updated Document"}
     response = client.put(f"/api/v1/documents/{document_id}", json=update_payload)
     assert response.status_code == 200
 
-    data = response.json()
-    assert data["name"] == "Updated Document"
+    document = response.json()
+    assert document["name"] == "Updated Document"
 
 
-def test_delete_document(client: TestClient, tmp_path):
-    """Test deleting a document"""
-    test_file = create_pdf_file(tmp_path)
-
-    payload = {
-        "name": "Test Document",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
-    create_response = client.post("/api/v1/documents", json=payload)
+def test_update_document_rejects_blank_name(client: TestClient):
+    """Test rejecting blank names during update."""
+    data, files = create_upload_payload()
+    create_response = client.post("/api/v1/documents", data=data, files=files)
     document_id = create_response.json()["id"]
 
-    # Delete the document
+    response = client.put(f"/api/v1/documents/{document_id}", json={"name": "   "})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Document name is required"
+
+
+def test_delete_document(client: TestClient):
+    """Test deleting a document."""
+    data, files = create_upload_payload()
+    create_response = client.post("/api/v1/documents", data=data, files=files)
+    document = create_response.json()
+    document_id = document["id"]
+
     response = client.delete(f"/api/v1/documents/{document_id}")
     assert response.status_code == 204
 
-    # Verify it's deleted
     get_response = client.get(f"/api/v1/documents/{document_id}")
     assert get_response.status_code == 404
 
 
-def test_create_document_rejects_non_pdf_extension(client: TestClient, tmp_path):
+def test_create_document_rejects_non_pdf_extension(client: TestClient):
     """Test rejecting files that do not have a .pdf extension."""
-    test_file = tmp_path / "test.txt"
-    test_file.write_text("not a pdf")
+    data, files = create_upload_payload(
+        name="Invalid Document",
+        filename="test.txt",
+        content=b"not a pdf",
+        content_type="text/plain",
+    )
 
-    payload = {
-        "name": "Invalid Document",
-        "file_path": str(test_file),
-        "file_size": test_file.stat().st_size,
-    }
-
-    response = client.post("/api/v1/documents", json=payload)
+    response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
     assert response.json()["detail"] == "Only PDF files are allowed"
 
 
-def test_create_document_rejects_invalid_pdf_content(client: TestClient, tmp_path):
+def test_create_document_rejects_invalid_pdf_content(client: TestClient):
     """Test rejecting files that end in .pdf but do not have a PDF signature."""
-    test_file = tmp_path / "fake.pdf"
-    test_file.write_text("this is not a pdf")
+    data, files = create_upload_payload(
+        name="Invalid PDF",
+        filename="fake.pdf",
+        content=b"this is not a pdf",
+    )
 
-    payload = {
-        "name": "Invalid PDF",
-        "file_path": str(test_file),
-        "file_size": test_file.stat().st_size,
-    }
-
-    response = client.post("/api/v1/documents", json=payload)
+    response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
     assert response.json()["detail"] == "Invalid PDF file"
 
 
-def test_create_document_rejects_file_size_mismatch(client: TestClient, tmp_path):
-    """Test rejecting payloads whose file_size does not match the file on disk."""
-    test_file = create_pdf_file(tmp_path)
-
-    payload = {
-        "name": "Wrong Size",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES) + 1,
-    }
-
-    response = client.post("/api/v1/documents", json=payload)
+def test_create_document_rejects_blank_name(client: TestClient):
+    """Test rejecting uploads without a valid document name."""
+    data, files = create_upload_payload(name="   ")
+    response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
-    assert "File size mismatch" in response.json()["detail"]
+    assert response.json()["detail"] == "Document name is required"
 
 
-def test_create_document_rejects_oversized_pdf(client: TestClient, tmp_path, monkeypatch):
+def test_create_document_rejects_oversized_pdf(client: TestClient, monkeypatch):
     """Test rejecting PDFs that exceed the configured size limit."""
-    test_file = create_pdf_file(tmp_path)
     monkeypatch.setattr(settings, "max_pdf_size_bytes", len(MINIMAL_PDF_BYTES) - 1)
+    data, files = create_upload_payload(name="Too Large")
 
-    payload = {
-        "name": "Too Large",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
-
-    response = client.post("/api/v1/documents", json=payload)
+    response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
     assert "PDF exceeds maximum allowed size" in response.json()["detail"]
 
 
-def test_create_document_rejects_duplicate_checksum(client: TestClient, tmp_path):
-    """Test rejecting PDFs with the same content but a different file path."""
-    original_file = create_pdf_file(tmp_path, name="original.pdf")
-    duplicate_file = create_pdf_file(tmp_path, name="duplicate.pdf")
+def test_create_document_rejects_duplicate_checksum(client: TestClient):
+    """Test rejecting PDFs with the same content but a different filename."""
+    first_data, first_files = create_upload_payload(
+        name="Original",
+        filename="original.pdf",
+    )
+    second_data, second_files = create_upload_payload(
+        name="Duplicate",
+        filename="duplicate.pdf",
+    )
 
-    first_payload = {
-        "name": "Original",
-        "file_path": str(original_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
-    second_payload = {
-        "name": "Duplicate",
-        "file_path": str(duplicate_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
-
-    first_response = client.post("/api/v1/documents", json=first_payload)
+    first_response = client.post("/api/v1/documents", data=first_data, files=first_files)
     assert first_response.status_code == 201
 
-    second_response = client.post("/api/v1/documents", json=second_payload)
+    second_response = client.post(
+        "/api/v1/documents", data=second_data, files=second_files
+    )
     assert second_response.status_code == 400
-    assert second_response.json()["detail"] == "Document with the same checksum already exists"
+    assert (
+        second_response.json()["detail"]
+        == "Document with the same checksum already exists"
+    )
 
 
-def test_create_document_rejects_duplicate_file_path(client: TestClient, tmp_path):
-    """Test rejecting reuse of the same file path when content changes."""
-    test_file = create_pdf_file(tmp_path)
-    first_payload = {
-        "name": "Original",
-        "file_path": str(test_file),
-        "file_size": len(MINIMAL_PDF_BYTES),
-    }
+def test_create_document_allows_same_filename_with_different_content(client: TestClient):
+    """Test allowing repeated original filenames when content changes."""
+    first_data, first_files = create_upload_payload(
+        name="Version One",
+        filename="same.pdf",
+        content=build_pdf_bytes("Version one"),
+    )
+    second_data, second_files = create_upload_payload(
+        name="Version Two",
+        filename="same.pdf",
+        content=build_pdf_bytes("Version two"),
+    )
 
-    first_response = client.post("/api/v1/documents", json=first_payload)
+    first_response = client.post("/api/v1/documents", data=first_data, files=first_files)
     assert first_response.status_code == 201
 
-    updated_content = MINIMAL_PDF_BYTES + b"\n%changed"
-    test_file.write_bytes(updated_content)
-
-    second_payload = {
-        "name": "Changed Path Reuse",
-        "file_path": str(test_file),
-        "file_size": len(updated_content),
-    }
-
-    second_response = client.post("/api/v1/documents", json=second_payload)
-    assert second_response.status_code == 400
-    assert second_response.json()["detail"] == "Document with this file path already exists"
+    second_response = client.post(
+        "/api/v1/documents", data=second_data, files=second_files
+    )
+    assert second_response.status_code == 201
+    assert second_response.json()["checksum"] != first_response.json()["checksum"]
 
 
-def test_extract_document_text(client: TestClient, tmp_path):
-    """Test extracting real text from a stored PDF."""
+def test_extract_document_text(client: TestClient):
+    """Test returning extracted text for an in-memory processed PDF."""
     extracted_text = "Hello PDF extraction"
     pdf_bytes = build_pdf_bytes(extracted_text)
-    test_file = create_pdf_file(tmp_path, content=pdf_bytes)
-
-    payload = {
-        "name": "Extractable Document",
-        "file_path": str(test_file),
-        "file_size": len(pdf_bytes),
-    }
-    create_response = client.post("/api/v1/documents", json=payload)
+    data, files = create_upload_payload(
+        name="Extractable Document",
+        filename="extractable.pdf",
+        content=pdf_bytes,
+    )
+    create_response = client.post("/api/v1/documents", data=data, files=files)
+    created_document = create_response.json()
     document_id = create_response.json()["id"]
+    assert created_document["is_processed"] is True
+    assert created_document["extracted_text"] == extracted_text
 
     response = client.post(f"/api/v1/documents/{document_id}/extract")
     assert response.status_code == 200
 
-    data = response.json()
-    assert data["id"] == document_id
-    assert data["is_processed"] is True
-    assert data["extracted_text"] == extracted_text
+    document = response.json()
+    assert document["id"] == document_id
+    assert document["is_processed"] is True
+    assert document["extracted_text"] == extracted_text
 
 
-def test_extract_document_rejects_changed_file_content(client: TestClient, tmp_path):
-    """Test rejecting extraction if the file content changes after registration."""
-    original_bytes = build_pdf_bytes("Original content")
-    test_file = create_pdf_file(tmp_path, content=original_bytes)
-
-    payload = {
-        "name": "Mutable Document",
-        "file_path": str(test_file),
-        "file_size": len(original_bytes),
-    }
-    create_response = client.post("/api/v1/documents", json=payload)
+def test_extract_document_returns_stored_text_without_reprocessing(client: TestClient):
+    """Test that extraction returns the stored in-memory result."""
+    original_text = "Original content"
+    original_bytes = build_pdf_bytes(original_text)
+    data, files = create_upload_payload(
+        name="Processed In Memory",
+        filename="processed.pdf",
+        content=original_bytes,
+    )
+    create_response = client.post("/api/v1/documents", data=data, files=files)
     document_id = create_response.json()["id"]
 
-    changed_bytes = build_pdf_bytes("Changed content!")
-    assert len(changed_bytes) == len(original_bytes)
-    Path(test_file).write_bytes(changed_bytes)
-
     response = client.post(f"/api/v1/documents/{document_id}/extract")
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Document file no longer matches the stored checksum"
+    assert response.status_code == 200
+    assert response.json()["extracted_text"] == original_text

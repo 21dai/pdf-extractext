@@ -1,260 +1,156 @@
-# PDF Extract API
+# API de Extraccion de PDF
 
-A professional 3-layer architecture FastAPI application for PDF document extraction and management.
+API construida con FastAPI y arquitectura de 3 capas para registrar PDFs, validar su contenido, evitar duplicados por checksum y extraer texto real. El proyecto procesa el PDF en memoria y persiste los metadatos y el texto extraido en MongoDB.
 
-## Arquitectura de 3 Capas
+## Estado actual
 
-La aplicación implementa un patrón de arquitectura de 3 capas:
+- Upload real de archivos PDF con `multipart/form-data`
+- Validacion de extension, firma PDF y tamano maximo
+- Checksum SHA-256 para evitar duplicados
+- Extraccion de texto con `pypdf`
+- Persistencia en MongoDB
+- Tests automatizados con `mongomock`
+- Documentacion interactiva en `Swagger UI`
 
-### 1. **Capa de Presentación (API)**
-- **Ubicación**: `app/api/routers/`
-- Maneja solicitudes y respuestas HTTP
-- Valida datos de entrada
-- Retorna códigos HTTP apropiados
-- Archivos: `document.py` - Endpoints de documentos
+## Arquitectura
 
-### 2. **Capa de Lógica de Negocio (Services)**
-- **Ubicación**: `app/services/`
-- Implementa reglas de negocio
-- Valida datos
-- Coordina entre API y capa de datos
-- Archivos: `document_service.py` - Servicio de documentos
+### 1. Capa de presentacion
+- Ubicacion: `app/api/routers/`
+- Responsabilidad: recibir requests HTTP y devolver responses
 
-### 3. **Capa de Acceso a Datos (Repositories)**
-- **Ubicación**: `app/repositories/`
-- Gestiona operaciones con base de datos
-- Abstrae implementación de base de datos
-- Proporciona interfaz CRUD limpia
-- Archivos: `document_repository.py` - Operaciones de base de datos
+### 2. Capa de logica
+- Ubicacion: `app/services/`
+- Responsabilidad: validaciones, reglas de negocio y extraccion
 
-## Estructura del Proyecto
+### 3. Capa de datos
+- Ubicacion: `app/repositories/`
+- Responsabilidad: persistencia en MongoDB
 
-```
-pdf-extractext/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                 # Factory de app FastAPI
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── routers/
-│   │       ├── __init__.py
-│   │       └── document.py     # Endpoints API (CAPA PRESENTACIÓN)
-│   ├── services/
-│   │   ├── __init__.py
-│   │   └── document_service.py # Lógica de negocio (CAPA LÓGICA)
-│   ├── repositories/
-│   │   ├── __init__.py
-│   │   └── document_repository.py # Operaciones BD (CAPA DATOS)
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── document.py         # Modelos SQLAlchemy
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   └── document.py         # Esquemas Pydantic
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py         # Configuración
-│   └── utils/
-│       ├── __init__.py
-│       └── database.py         # Setup de base de datos
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py            # Fixtures de Pytest
-│   └── test_documents.py      # Tests de API
-├── main.py                     # Punto de entrada
-├── pyproject.toml             # Dependencias
-├── .env.example               # Variables de entorno
-└── README.md
-```
+## Requisitos
 
-## Tecnologías
+- Python 3.13+
+- Docker Desktop con Docker Compose
 
-- **Python** 3.11+
-- **FastAPI** - Framework web moderno
-- **SQLAlchemy** - ORM para base de datos
-- **Pydantic** - Validación de datos
-- **Pytest** - Testing
-- **UV** - Gestor de dependencias (opcional)
+## Instalacion
 
-## Metodologías
-
-- **TDD** - Test-Driven Development
-- **Proyecto dirigido en GitHub** - GitHub-driven development
-- **12 Factor App** - Principios de aplicación cloud-native
-- **SOLID** - Principios de diseño
-
-## Principios de Programación
-
-- **KISS** - Keep It Simple, Stupid
-- **DRY** - Don't Repeat Yourself
-- **YAGNI** - You Aren't Gonna Need It
-- **SOLID** - Single Responsibility, Open/Closed, Liskov, Interface Segregation, Dependency Inversion
-
-## Instalación
-
-### Requisitos Previos
-- Python 3.11+
-- pip o UV
-
-### Configuración
-
-1. Clonar repositorio:
 ```bash
 cd pdf-extractext
-```
-
-2. Crear y activar ambiente virtual:
-```bash
 python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+venv\Scripts\activate
+python -m pip install -e ".[dev]"
+copy .env.example .env
 ```
 
-3. Instalar dependencias:
+## Arranque rapido con Mongo real
+
+1. Levantar MongoDB con Docker:
+
 ```bash
-pip install -e ".[dev]"
+docker compose up -d
 ```
 
-4. Crear archivo `.env` desde plantilla:
+2. Verificar que el contenedor este sano:
+
 ```bash
-cp .env.example .env
+docker compose ps
 ```
 
-## Ejecutar la Aplicación
-
-### Servidor de Desarrollo
+3. Levantar la API:
 
 ```bash
 python main.py
 ```
 
-La API estará disponible en `http://localhost:8000`
+## URLs utiles
 
-### Documentación API
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- Health: `http://localhost:8000/health`
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+## Endpoints principales
 
-## Endpoints de API
+- `POST /api/v1/documents`
+- `GET /api/v1/documents`
+- `GET /api/v1/documents/{document_id}`
+- `PUT /api/v1/documents/{document_id}`
+- `DELETE /api/v1/documents/{document_id}`
+- `POST /api/v1/documents/{document_id}/extract`
+- `GET /health`
 
-### Documentos
+## Flujo principal
 
-- `GET /api/v1/documents` - Listar todos los documentos
-- `POST /api/v1/documents` - Crear nuevo documento
-- `GET /api/v1/documents/{document_id}` - Obtener documento por ID
-- `PUT /api/v1/documents/{document_id}` - Actualizar documento
-- `DELETE /api/v1/documents/{document_id}` - Eliminar documento
-- `POST /api/v1/documents/{document_id}/extract` - Extraer texto de documento
+1. El cliente sube un PDF con `name` y `file`.
+2. La API valida que sea un PDF real.
+3. Se calcula el checksum.
+4. Si el checksum ya existe, el documento se rechaza.
+5. Si es valido, se extrae el texto en memoria.
+6. Se guarda el documento en MongoDB.
 
-## Testing
+## Ejemplo de uso con curl
 
-Ejecutar tests:
 ```bash
-pytest
+curl -X POST "http://localhost:8000/api/v1/documents" ^
+  -H "accept: application/json" ^
+  -H "Content-Type: multipart/form-data" ^
+  -F "name=Contrato de prueba" ^
+  -F "file=@C:/ruta/al/archivo.pdf;type=application/pdf"
 ```
 
-Ejecutar tests con cobertura:
-```bash
-pytest --cov=app
+Respuesta esperada:
+
+```json
+{
+  "name": "Contrato de prueba",
+  "original_filename": "archivo.pdf",
+  "file_size": 12345,
+  "id": 1,
+  "checksum": "sha256...",
+  "extracted_text": "Texto extraido del PDF",
+  "is_processed": true,
+  "created_at": "2026-04-25T23:56:47.157530Z",
+  "updated_at": "2026-04-25T23:56:47.157530Z"
+}
 ```
 
-## Configuración
+## Tests
 
-La configuración se gestiona a través de variables de entorno en archivo `.env`:
+```bash
+python -m pytest -q
+```
+
+Resultado esperado:
+
+```text
+16 passed
+```
+
+## Variables de entorno
 
 ```env
-# Aplicación
-APP_NAME=PDF Extract API
+APP_NAME=API de Extraccion de PDF
+APP_VERSION=0.1.0
 DEBUG=False
-
-# Servidor
 HOST=0.0.0.0
 PORT=8000
-
-# Base de datos
-DATABASE_URL=sqlite:///./pdf_extract.db
-
-# API
+DATABASE_URL=mongodb://localhost:27017
+DATABASE_NAME=pdf_extract
+DATABASE_TIMEOUT_MS=3000
+MAX_PDF_SIZE_BYTES=10485760
 API_V1_PREFIX=/api/v1
+API_DOCS_URL=/docs
+API_REDOC_URL=/redoc
+API_OPENAPI_URL=/openapi.json
 ```
 
-## Calidad de Código
+## Apagar Mongo
 
-### Formatear código
 ```bash
-black app tests
+docker compose down
 ```
 
-### Verificar linting
+Para borrar tambien los datos locales:
+
 ```bash
-flake8 app tests
+docker compose down -v
 ```
-
-### Ordenar imports
-```bash
-isort app tests
-```
-
-### Type checking
-```bash
-mypy app
-```
-
-## Modelo de Base de Datos
-
-### Modelo Document
-- `id`: Entero (Clave Primaria)
-- `name`: Texto (255 caracteres)
-- `file_path`: Texto (500 caracteres, único)
-- `file_size`: Entero
-- `extracted_text`: Texto (nullable)
-- `is_processed`: Booleano (default: False)
-- `created_at`: DateTime
-- `updated_at`: DateTime
-
-## Agregar Nuevas Características
-
-Para agregar una nueva característica siguiendo la arquitectura de 3 capas:
-
-1. **Crear Modelo de Base de Datos** (`app/models/`)
-   - Definir modelo SQLAlchemy
-
-2. **Crear Repository** (`app/repositories/`)
-   - Implementar métodos de acceso a datos
-
-3. **Crear Service** (`app/services/`)
-   - Implementar lógica de negocio
-
-4. **Crear Schema** (`app/schemas/`)
-   - Definir modelos Pydantic de request/response
-
-5. **Crear Router** (`app/api/routers/`)
-   - Definir endpoints de API
-
-6. **Escribir Tests** (`tests/`)
-   - Testear todas las capas
-
-## Mejores Prácticas
-
-- **Una Responsabilidad**: Cada capa tiene una responsabilidad específica
-- **Inyección de Dependencias**: Servicios y repositorios se inyectan vía dependencias
-- **Manejo de Errores**: Códigos HTTP apropiados y mensajes de error claros
-- **Validación**: Pydantic valida todas las entradas
-- **Testing**: Tests unitarios para servicios y tests de integración para endpoints
-- **Documentación**: Docstrings y documentación de API
-
-## Mejoras Futuras
-
-- [ ] Agregar autenticación JWT
-- [ ] Implementar extracción de texto PDF (PyPDF2/pdfplumber)
-- [ ] Implementar operaciones de BD asincrónicas
-- [ ] Agregar capa de caché
-- [ ] Implementar logging
-- [ ] Migraciones de BD con Alembic
-- [ ] Soporte WebSocket para tareas largas
-- [ ] Rate limiting y throttling
-- [ ] Manejo de carga de archivos
-- [ ] Procesamiento en lote
-
-## Licencia
-
-MIT License
