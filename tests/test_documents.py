@@ -154,7 +154,7 @@ def test_update_document_rejects_blank_name(client: TestClient):
 
     response = client.put(f"/api/v1/documents/{document_id}", json={"name": "   "})
     assert response.status_code == 400
-    assert response.json()["detail"] == "Document name is required"
+    assert response.json()["detail"] == "El nombre del documento es obligatorio"
 
 
 def test_delete_document(client: TestClient):
@@ -182,7 +182,7 @@ def test_create_document_rejects_non_pdf_extension(client: TestClient):
 
     response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
-    assert response.json()["detail"] == "Only PDF files are allowed"
+    assert response.json()["detail"] == "Solo se permiten archivos PDF"
 
 
 def test_create_document_rejects_invalid_pdf_content(client: TestClient):
@@ -195,7 +195,7 @@ def test_create_document_rejects_invalid_pdf_content(client: TestClient):
 
     response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid PDF file"
+    assert response.json()["detail"] == "Archivo PDF invalido"
 
 
 def test_create_document_rejects_blank_name(client: TestClient):
@@ -203,7 +203,7 @@ def test_create_document_rejects_blank_name(client: TestClient):
     data, files = create_upload_payload(name="   ")
     response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
-    assert response.json()["detail"] == "Document name is required"
+    assert response.json()["detail"] == "El nombre del documento es obligatorio"
 
 
 def test_create_document_rejects_oversized_pdf(client: TestClient, monkeypatch):
@@ -213,7 +213,7 @@ def test_create_document_rejects_oversized_pdf(client: TestClient, monkeypatch):
 
     response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
-    assert "PDF exceeds maximum allowed size" in response.json()["detail"]
+    assert "El PDF supera el tamano maximo permitido" in response.json()["detail"]
 
 
 def test_create_document_rejects_duplicate_checksum(client: TestClient):
@@ -236,7 +236,7 @@ def test_create_document_rejects_duplicate_checksum(client: TestClient):
     assert second_response.status_code == 400
     assert (
         second_response.json()["detail"]
-        == "Document with the same checksum already exists"
+        == "Ya existe un documento con el mismo checksum"
     )
 
 

@@ -34,12 +34,33 @@ API construida con FastAPI y arquitectura de 3 capas para registrar PDFs, valida
 - Ubicacion: `app/repositories/`
 - Responsabilidad: persistencia en MongoDB
 
+## Documentacion util
+
+- `START_HERE.md`: punto de entrada rapido
+- `QUICKSTART.md`: arranque en pocos minutos
+- `DEMO.md`: guion sugerido para mostrar en clase
+- `REVISION_ENUNCIADO.md`: chequeo punto por punto contra el TP
+- `ARCHITECTURE.md`: resumen de arquitectura actual
+- `EJEMPLOS.md`: ejemplos de requests y respuestas
+- `VISUAL_GUIDE.md`: vista visual del flujo principal
+
 ## Requisitos
 
 - Python 3.13+
+- `uv` disponible
 - Docker Desktop con Docker Compose
 
 ## Instalacion
+
+### Opcion recomendada con uv
+
+```bash
+cd pdf-extractext
+uv sync --extra dev
+copy .env.example .env
+```
+
+### Opcion alternativa con pip
 
 ```bash
 cd pdf-extractext
@@ -94,6 +115,12 @@ python main.py
 4. Si el checksum ya existe, el documento se rechaza.
 5. Si es valido, se extrae el texto en memoria.
 6. Se guarda el documento en MongoDB.
+
+## Limitacion conocida
+
+Si el PDF contiene solo imagenes o escaneos, `extracted_text` puede venir vacio.
+
+Eso no implica un error de la API. La extraccion actual usa `pypdf`, que obtiene texto digital, pero no realiza OCR.
 
 ## Ejemplo de uso con curl
 

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DocumentBase(BaseModel):
@@ -30,6 +30,8 @@ class DocumentUpdate(BaseModel):
 class DocumentResponse(DocumentBase):
     """Schema for document response."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int = Field(..., description="Identificador unico del documento")
     checksum: str = Field(..., description="Checksum SHA-256 del archivo PDF")
     extracted_text: str | None = Field(
@@ -40,8 +42,3 @@ class DocumentResponse(DocumentBase):
     )
     created_at: datetime = Field(..., description="Fecha de creacion del registro")
     updated_at: datetime = Field(..., description="Fecha de ultima actualizacion")
-
-    class Config:
-        """Pydantic config"""
-
-        from_attributes = True

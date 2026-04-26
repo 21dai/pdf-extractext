@@ -96,7 +96,7 @@ async def get_document(
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document {document_id} not found",
+            detail=f"Documento {document_id} no encontrado",
         )
     return document
 
@@ -130,7 +130,7 @@ async def update_document(
         if not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document {document_id} not found",
+                detail=f"Documento {document_id} no encontrado",
             )
         return document
     except ValueError as exc:
@@ -159,7 +159,7 @@ async def delete_document(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Document {document_id} not found",
+            detail=f"Documento {document_id} no encontrado",
         )
 
 
@@ -190,7 +190,7 @@ async def extract_text(
         if not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document {document_id} not found",
+                detail=f"Documento {document_id} no encontrado",
             )
         return document
     except ValueError as exc:

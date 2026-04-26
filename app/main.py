@@ -74,7 +74,7 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database unavailable",
+                detail="Base de datos no disponible",
             ) from exc
 
         return {

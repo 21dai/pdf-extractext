@@ -1,80 +1,79 @@
-# 🚀 COMIENZA AQUÍ
+# Comienza Aqui
 
-## ¿Qué es esto?
+## Que tenes en este repo
 
-Una **estructura de 3 capas profesional con FastAPI** lista para usar y escalar.
+Una API en FastAPI para:
 
-## 5 Minutos para Empezar
+- subir archivos PDF reales
+- validar formato y tamano
+- calcular checksum SHA-256
+- evitar duplicados
+- extraer texto en memoria
+- persistir documentos en MongoDB
+
+## El flujo actual
+
+```text
+Cliente -> Router -> Service -> Repository -> MongoDB
+```
+
+## Arranque recomendado para clase
+
+### 1. Levantar MongoDB
 
 ```bash
-# 1. Ir al proyecto
-cd /home/daiana/UTN/UTN/3ro/Desarrollo/Proyecto/pdf-extractext
+docker compose up -d
+```
 
-# 2. Ambiente virtual
-python -m venv venv
-source venv/bin/activate  # Mac/Linux
-# venv\Scripts\activate  # Windows
+### 2. Verificar que Mongo este bien
 
-# 3. Instalar
-pip install -e ".[dev]"
+```bash
+docker compose ps
+```
 
-# 4. Ejecutar
+### 3. Ejecutar la API
+
+```bash
 python main.py
-
-# 5. Ver en navegador
-# http://localhost:8000/docs
 ```
 
-## Archivos Importantes
+### 4. Abrir Swagger
 
-| Archivo | Qué es |
-|---------|--------|
-| **README.md** | Documentación completa |
-| **QUICKSTART.md** | Ejemplos rápidos |
-| **ARCHITECTURE.md** | Cómo funciona internamente |
-| **VISUAL_GUIDE.md** | Diagramas y flujos |
-| **EJEMPLOS.md** | Casos de uso |
-
-## Las 3 Capas
-
-```
-Router → Service → Repository → Database
-  (API)   (Lógica)  (Datos)    (BD)
+```text
+http://localhost:8000/docs
 ```
 
-## Endpoints
+### 5. Verificar salud
 
-- `POST /api/v1/documents` - Crear
-- `GET /api/v1/documents` - Listar
-- `GET /api/v1/documents/{id}` - Obtener
-- `PUT /api/v1/documents/{id}` - Actualizar
-- `DELETE /api/v1/documents/{id}` - Eliminar
-
-## Estructura
-
-```
-app/
-├── api/           ← Endpoints HTTP
-├── services/      ← Lógica de negocio
-├── repositories/  ← Acceso a datos
-├── models/        ← Modelos BD
-└── schemas/       ← Validación
+```text
+http://localhost:8000/health
 ```
 
-## Próximos Pasos
+## Archivos mas importantes
 
-1. Lee **README.md** para entender el proyecto
-2. Lee **QUICKSTART.md** para ejemplos rápidos
-3. Lee **ARCHITECTURE.md** para aprender el patrón
-4. Ejecuta los tests: `pytest -v`
+- `README.md`: vista general del proyecto
+- `QUICKSTART.md`: arranque rapido
+- `DEMO.md`: guion de demo para clase
+- `REVISION_ENUNCIADO.md`: chequeo contra lo pedido por el profesor
+- `app/api/routers/document.py`: endpoints
+- `app/services/document_service.py`: reglas de negocio
+- `app/repositories/document_repository.py`: persistencia en MongoDB
 
-## ¿Necesitas agregar una entidad?
+## Si queres recorrer el codigo
 
-Sigue el patrón de `Document`:
-1. Model → Schema → Repository → Service → Router
+1. `tests/test_documents.py`
+2. `app/api/routers/document.py`
+3. `app/services/document_service.py`
+4. `app/repositories/document_repository.py`
 
-¡Listo! Más de 30 minutos de código profesional.
+## Comando rapido de verificacion
 
----
+```bash
+python -m pytest -q
+```
 
-**¡El proyecto está listo para producción!** ✨
+Resultado esperado:
+
+```text
+16 passed
+```

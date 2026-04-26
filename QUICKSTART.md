@@ -4,11 +4,22 @@
 
 ### 1. Instalar dependencias
 
+Opcion recomendada con `uv`:
+
+```bash
+cd pdf-extractext
+uv sync --extra dev
+copy .env.example .env
+```
+
+Opcion alternativa con `pip`:
+
 ```bash
 cd pdf-extractext
 python -m venv venv
 venv\Scripts\activate
 python -m pip install -e ".[dev]"
+copy .env.example .env
 ```
 
 ### 2. Levantar MongoDB real

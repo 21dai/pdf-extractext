@@ -42,14 +42,14 @@ class DocumentService:
         """
         normalized_name = name.strip()
         if not normalized_name:
-            raise ValueError("Document name is required")
+            raise ValueError("El nombre del documento es obligatorio")
 
         normalized_filename = self._normalize_original_filename(original_filename)
         self._validate_uploaded_pdf(normalized_filename, file_content)
         checksum = self._calculate_checksum(file_content)
 
         if self.repository.get_by_checksum(checksum):
-            raise ValueError("Document with the same checksum already exists")
+            raise ValueError("Ya existe un documento con el mismo checksum")
 
         extracted_text = self._extract_pdf_text_from_bytes(file_content)
         document = Document(
@@ -113,7 +113,7 @@ class DocumentService:
         if "name" in update_data:
             normalized_name = update_data["name"].strip()
             if not normalized_name:
-                raise ValueError("Document name is required")
+                raise ValueError("El nombre del documento es obligatorio")
             update_data["name"] = normalized_name
 
         document = self.repository.update(document_id, update_data)
@@ -167,7 +167,9 @@ class DocumentService:
 
             current_checksum = self._calculate_file_checksum(file_path)
             if current_checksum != document.checksum:
-                raise ValueError("Document file no longer matches the stored checksum")
+                raise ValueError(
+                    "El archivo del documento ya no coincide con el checksum almacenado"
+                )
 
             extracted_text = self._extract_pdf_text_from_file(file_path)
 
@@ -181,7 +183,7 @@ class DocumentService:
         except ValueError:
             raise
         except Exception as exc:
-            raise ValueError(f"Error extracting text: {str(exc)}")
+            raise ValueError(f"Error al extraer el texto: {str(exc)}")
 
     def _normalize_original_filename(self, original_filename: str | None) -> str:
         """
@@ -194,11 +196,11 @@ class DocumentService:
             Sanitized filename
         """
         if not original_filename:
-            raise ValueError("A PDF file is required")
+            raise ValueError("Se requiere un archivo PDF")
 
         normalized_filename = Path(original_filename).name.strip()
         if not normalized_filename:
-            raise ValueError("A PDF file is required")
+            raise ValueError("Se requiere un archivo PDF")
 
         return normalized_filename
 
@@ -213,19 +215,20 @@ class DocumentService:
             file_content: Uploaded PDF bytes
         """
         if Path(original_filename).suffix.lower() != ".pdf":
-            raise ValueError("Only PDF files are allowed")
+            raise ValueError("Solo se permiten archivos PDF")
 
         file_size = len(file_content)
         if file_size == 0:
-            raise ValueError("Invalid PDF file")
+            raise ValueError("Archivo PDF invalido")
 
         if file_size > settings.max_pdf_size_bytes:
             raise ValueError(
-                f"PDF exceeds maximum allowed size of {settings.max_pdf_size_bytes} bytes"
+                "El PDF supera el tamano maximo permitido de "
+                f"{settings.max_pdf_size_bytes} bytes"
             )
 
         if file_content[: len(self.PDF_SIGNATURE)] != self.PDF_SIGNATURE:
-            raise ValueError("Invalid PDF file")
+            raise ValueError("Archivo PDF invalido")
 
     def _validate_pdf_file(self, file_path: Path, expected_size: int) -> None:
         """
@@ -236,25 +239,27 @@ class DocumentService:
             expected_size: Expected size in bytes
         """
         if not file_path.is_file():
-            raise ValueError(f"File not found: {file_path}")
+            raise ValueError(f"Archivo no encontrado: {file_path}")
 
         if file_path.suffix.lower() != ".pdf":
-            raise ValueError("Only PDF files are allowed")
+            raise ValueError("Solo se permiten archivos PDF")
 
         actual_size = file_path.stat().st_size
         if actual_size != expected_size:
             raise ValueError(
-                f"File size mismatch: expected {expected_size} bytes, found {actual_size}"
+                "El tamano del archivo no coincide: se esperaban "
+                f"{expected_size} bytes y se encontraron {actual_size}"
             )
 
         if actual_size > settings.max_pdf_size_bytes:
             raise ValueError(
-                f"PDF exceeds maximum allowed size of {settings.max_pdf_size_bytes} bytes"
+                "El PDF supera el tamano maximo permitido de "
+                f"{settings.max_pdf_size_bytes} bytes"
             )
 
         with file_path.open("rb") as pdf_file:
             if pdf_file.read(len(self.PDF_SIGNATURE)) != self.PDF_SIGNATURE:
-                raise ValueError("Invalid PDF file")
+                raise ValueError("Archivo PDF invalido")
 
     def _calculate_checksum(self, file_content: bytes) -> str:
         """
@@ -335,7 +340,9 @@ class DocumentService:
         try:
             from pypdf import PdfReader
         except ImportError as exc:
-            raise ValueError("PDF extraction dependency is not installed") from exc
+            raise ValueError(
+                "La dependencia de extraccion de PDF no esta instalada"
+            ) from exc
 
         try:
             reader = PdfReader(pdf_source)
@@ -346,4 +353,4 @@ class DocumentService:
                     page_texts.append(text)
             return "\n\n".join(page_texts)
         except Exception as exc:
-            raise ValueError(f"Error extracting text: {str(exc)}") from exc
+            raise ValueError(f"Error al extraer el texto: {str(exc)}") from exc
