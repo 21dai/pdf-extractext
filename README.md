@@ -2,6 +2,14 @@
 
 API construida con FastAPI y arquitectura de 3 capas para registrar PDFs, validar su contenido, evitar duplicados por checksum y extraer texto real. El proyecto procesa el PDF en memoria y persiste los metadatos y el texto extraido en MongoDB.
 
+## Integrantes
+- Gabriel Flores
+- Lucas Martinez
+- Daiana Galdeano
+- Solange Parada
+- Joaquin Antequeda
+- Nicolas Santivañez
+
 ## Estado actual
 
 - Upload real de archivos PDF con `multipart/form-data`
