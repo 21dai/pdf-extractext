@@ -2,17 +2,16 @@
 
 from fastapi.testclient import TestClient
 
-from tests.support.pdf import create_upload_payload
+from tests.support.api_documents import create_document_body
 
 
-def test_delete_document(client: TestClient):
-    """Test deleting a document."""
-    data, files = create_upload_payload()
-    create_response = client.post("/api/v1/documents", data=data, files=files)
-    document = create_response.json()
-    document_id = document["id"]
+def test_delete_document_removes_document_from_subsequent_reads(client: TestClient):
+    """Test deleting a document removes it from subsequent reads."""
+    created_document = create_document_body(client)
+    document_id = created_document["id"]
 
     response = client.delete(f"/api/v1/documents/{document_id}")
+
     assert response.status_code == 204
 
     get_response = client.get(f"/api/v1/documents/{document_id}")

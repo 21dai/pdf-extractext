@@ -3,9 +3,12 @@
 from fastapi.testclient import TestClient
 
 
-def test_health_endpoint(client: TestClient):
-    """Test application health endpoint."""
+def test_health_endpoint_returns_ok_status_and_database_name(client: TestClient):
+    """Test the health endpoint returns the expected status and database name."""
     response = client.get("/health")
+
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    assert response.json()["database"] == "mongodb"
+
+    health_data = response.json()
+    assert health_data["status"] == "ok"
+    assert health_data["database"] == "mongodb"

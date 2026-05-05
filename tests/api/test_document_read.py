@@ -2,33 +2,39 @@
 
 from fastapi.testclient import TestClient
 
-from tests.support.pdf import create_upload_payload, pdf_checksum
+from tests.support.api_documents import create_document_body
 
 
-def test_list_documents_empty(client: TestClient):
-    """Test listing documents when empty."""
+def test_list_documents_returns_empty_list_when_database_has_no_documents(
+    client: TestClient,
+):
+    """Test listing documents returns an empty list when no documents exist."""
     response = client.get("/api/v1/documents")
+
     assert response.status_code == 200
-    assert response.json() == []
+
+    response_body = response.json()
+    assert response_body == []
 
 
-def test_get_document(client: TestClient):
-    """Test getting a document by ID."""
-    data, files = create_upload_payload()
-    create_response = client.post("/api/v1/documents", data=data, files=files)
-    document_id = create_response.json()["id"]
+def test_get_document_returns_previously_created_document(client: TestClient):
+    """Test getting a document returns a previously created document."""
+    created_document = create_document_body(client)
+    document_id = created_document["id"]
 
     response = client.get(f"/api/v1/documents/{document_id}")
+
     assert response.status_code == 200
 
     document = response.json()
     assert document["id"] == document_id
-    assert document["name"] == "Test Document"
-    assert document["original_filename"] == "test.pdf"
-    assert document["checksum"] == pdf_checksum()
+    assert document["name"] == created_document["name"]
+    assert document["original_filename"] == created_document["original_filename"]
+    assert document["checksum"] == created_document["checksum"]
 
 
-def test_get_nonexistent_document(client: TestClient):
-    """Test getting a non-existent document."""
+def test_get_document_returns_not_found_for_unknown_id(client: TestClient):
+    """Test getting a document returns not found for an unknown ID."""
     response = client.get("/api/v1/documents/999")
+
     assert response.status_code == 404
