@@ -15,6 +15,10 @@ class DocumentService:
     """Service for document business logic."""
 
     PDF_SIGNATURE = b"%PDF-"
+    EXTRACT_ONLY_ON_UPLOAD_MESSAGE = (
+        "La API procesa el PDF solo en el upload y no lo guarda en disco, "
+        "por lo que no puede reprocesar."
+    )
 
     def __init__(self, db: Any):
         """
@@ -137,53 +141,17 @@ class DocumentService:
         if not document:
             return False
 
-        deleted = self.repository.delete(document_id)
-        if deleted and document.file_path:
-            legacy_path = Path(document.file_path)
-            if legacy_path.is_file():
-                legacy_path.unlink(missing_ok=True)
-        return deleted
+        return self.repository.delete(document_id)
 
     def extract_text(self, document_id: int) -> Optional[DocumentResponse]:
-        """
-        Extract text from PDF document.
-
-        Args:
-            document_id: Document ID
-
-        Returns:
-            Updated document response
-        """
         document = self.repository.get_by_id(document_id)
         if not document:
             return None
 
-        try:
-            if document.is_processed and document.extracted_text is not None:
-                return DocumentResponse.model_validate(document)
+        if document.is_processed and document.extracted_text is not None:
+            return DocumentResponse.model_validate(document)
 
-            file_path = Path(document.file_path)
-            self._validate_pdf_file(file_path, document.file_size)
-
-            current_checksum = self._calculate_file_checksum(file_path)
-            if current_checksum != document.checksum:
-                raise ValueError(
-                    "El archivo del documento ya no coincide con el checksum almacenado"
-                )
-
-            extracted_text = self._extract_pdf_text_from_file(file_path)
-
-            update_data = {
-                "extracted_text": extracted_text,
-                "is_processed": True,
-            }
-            updated_doc = self.repository.update(document_id, update_data)
-            return DocumentResponse.model_validate(updated_doc)
-
-        except ValueError:
-            raise
-        except Exception as exc:
-            raise ValueError(f"Error al extraer el texto: {str(exc)}")
+        raise ValueError(self.EXTRACT_ONLY_ON_UPLOAD_MESSAGE)
 
     def _normalize_original_filename(self, original_filename: str | None) -> str:
         """
@@ -230,36 +198,6 @@ class DocumentService:
         if file_content[: len(self.PDF_SIGNATURE)] != self.PDF_SIGNATURE:
             raise ValueError("Archivo PDF invalido")
 
-    def _validate_pdf_file(self, file_path: Path, expected_size: int) -> None:
-        """
-        Validate that the given path points to a stored PDF file with a valid size.
-
-        Args:
-            file_path: Path to the file on disk
-            expected_size: Expected size in bytes
-        """
-        if not file_path.is_file():
-            raise ValueError(f"Archivo no encontrado: {file_path}")
-
-        if file_path.suffix.lower() != ".pdf":
-            raise ValueError("Solo se permiten archivos PDF")
-
-        actual_size = file_path.stat().st_size
-        if actual_size != expected_size:
-            raise ValueError(
-                "El tamano del archivo no coincide: se esperaban "
-                f"{expected_size} bytes y se encontraron {actual_size}"
-            )
-
-        if actual_size > settings.max_pdf_size_bytes:
-            raise ValueError(
-                "El PDF supera el tamano maximo permitido de "
-                f"{settings.max_pdf_size_bytes} bytes"
-            )
-
-        with file_path.open("rb") as pdf_file:
-            if pdf_file.read(len(self.PDF_SIGNATURE)) != self.PDF_SIGNATURE:
-                raise ValueError("Archivo PDF invalido")
 
     def _calculate_checksum(self, file_content: bytes) -> str:
         """
@@ -273,22 +211,6 @@ class DocumentService:
         """
         digest = hashlib.sha256()
         digest.update(file_content)
-        return digest.hexdigest()
-
-    def _calculate_file_checksum(self, file_path: Path) -> str:
-        """
-        Calculate the SHA-256 checksum of a stored file.
-
-        Args:
-            file_path: Path to the stored file on disk
-
-        Returns:
-            SHA-256 checksum as a hex string
-        """
-        digest = hashlib.sha256()
-        with file_path.open("rb") as pdf_file:
-            for chunk in iter(lambda: pdf_file.read(8192), b""):
-                digest.update(chunk)
         return digest.hexdigest()
 
     def _build_memory_reference(self, checksum: str) -> str:
@@ -314,18 +236,6 @@ class DocumentService:
             Extracted text with normalized page separation
         """
         return self._extract_pdf_text(BytesIO(file_content))
-
-    def _extract_pdf_text_from_file(self, file_path: Path) -> str:
-        """
-        Extract text from a legacy stored PDF file using pypdf.
-
-        Args:
-            file_path: Path to the PDF file on disk
-
-        Returns:
-            Extracted text with normalized page separation
-        """
-        return self._extract_pdf_text(str(file_path))
 
     def _extract_pdf_text(self, pdf_source: BytesIO | str) -> str:
         """
