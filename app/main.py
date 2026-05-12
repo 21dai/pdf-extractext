@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import document_router
 from app.config import settings
 from app.utils.database import create_tables, get_db
+from app.utils.problem_details import register_problem_details_handlers
 
 
 @asynccontextmanager
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    register_problem_details_handlers(app)
     app.include_router(document_router, prefix=settings.api_v1_prefix)
 
     @app.get("/", tags=["inicio"], summary="Ver informacion basica de la API")
@@ -74,7 +76,7 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database unavailable",
+                detail="Base de datos no disponible",
             ) from exc
 
         return {

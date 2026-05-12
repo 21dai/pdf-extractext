@@ -2,13 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
-
-from app.core.validators import (
-    MAX_DOCUMENT_NAME_LENGTH,
-    validate_document_name,
-    validate_original_filename,
-)
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DocumentBase(BaseModel):
@@ -32,19 +26,11 @@ class DocumentUpdate(BaseModel):
 
     name: str | None = Field(None, description="Nuevo nombre del documento")
 
-    @field_validator("name")
-    @classmethod
-    def _validate_name(cls, value: str | None) -> str | None:
-        """Ensure the name is valid before reaching the service layer."""
-        if value is None:
-            return None
-        # Reuse the same validation logic from core/validators to avoid duplication.
-        validated = validate_document_name(value)
-        return validated
-
 
 class DocumentResponse(DocumentBase):
     """Schema for document response."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(..., description="Identificador unico del documento")
     checksum: str = Field(..., description="Checksum SHA-256 del archivo PDF")
@@ -55,9 +41,4 @@ class DocumentResponse(DocumentBase):
         ..., description="Indica si el documento ya fue procesado"
     )
     created_at: datetime = Field(..., description="Fecha de creacion del registro")
-    updated_at: datetime = Field(..., description="Fecha de ultima actualizacion del registro")
-
-    class Config:
-        """Pydantic config"""
-
-        from_attributes = True
+    updated_at: datetime = Field(..., description="Fecha de ultima actualizacion")

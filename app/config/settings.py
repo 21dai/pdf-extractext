@@ -3,10 +3,13 @@
 from typing import Any, Optional
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     """Application configuration settings"""
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     # Application
     app_name: str = "API de Extraccion de PDF"
@@ -35,17 +38,27 @@ class Settings(BaseSettings):
         """Accept common environment values for debug mode."""
         if isinstance(value, str):
             normalized = value.strip().lower()
-            if normalized in {"1", "true", "yes", "on", "debug", "dev", "development"}:
+            if normalized in {
+                "1",
+                "true",
+                "yes",
+                "on",
+                "debug",
+                "dev",
+                "development",
+            }:
                 return True
-            if normalized in {"0", "false", "no", "off", "release", "prod", "production"}:
+            if normalized in {
+                "0",
+                "false",
+                "no",
+                "off",
+                "release",
+                "prod",
+                "production",
+            }:
                 return False
         return value
-
-    class Config:
-        """Pydantic config"""
-
-        env_file = ".env"
-        case_sensitive = False
 
 
 # Create a global settings instance

@@ -4,7 +4,7 @@
 
 - [ ] Python 3.13+ instalado
 - [ ] Docker Desktop funcionando
-- [ ] Dependencias instaladas con `python -m pip install -e ".[dev]"`
+- [ ] Dependencias instaladas con `uv sync --extra dev` o `python -m pip install -e ".[dev]"`
 - [ ] Archivo `.env` creado a partir de `.env.example`
 
 ## MongoDB

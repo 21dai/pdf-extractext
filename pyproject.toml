@@ -37,3 +37,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["app"]
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"

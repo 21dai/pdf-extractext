@@ -36,20 +36,20 @@ class TestValidateDocumentName:
         assert validate_document_name("  Contract  ") == "Contract"
 
     def test_blank_name(self):
-        with pytest.raises(ValueError, match="Document name is required"):
+        with pytest.raises(ValueError, match="El nombre del documento es obligatorio"):
             validate_document_name("   ")
 
     def test_none_name(self):
-        with pytest.raises(ValueError, match="Document name is required"):
+        with pytest.raises(ValueError, match="El nombre del documento es obligatorio"):
             validate_document_name(None)
 
     def test_empty_string(self):
-        with pytest.raises(ValueError, match="Document name is required"):
+        with pytest.raises(ValueError, match="El nombre del documento es obligatorio"):
             validate_document_name("")
 
     def test_name_too_long(self):
         long_name = "A" * (MAX_DOCUMENT_NAME_LENGTH + 1)
-        with pytest.raises(ValueError, match="must not exceed"):
+        with pytest.raises(ValueError, match="no debe superar"):
             validate_document_name(long_name)
 
     def test_name_exactly_max_length(self):
@@ -57,7 +57,7 @@ class TestValidateDocumentName:
         assert validate_document_name(name) == name
 
     def test_non_string_name(self):
-        with pytest.raises(ValueError, match="must be a string"):
+        with pytest.raises(ValueError, match="debe ser una cadena de texto"):
             validate_document_name(123)
 
 
@@ -74,16 +74,16 @@ class TestValidateOriginalFilename:
         assert validate_original_filename("../../../etc/passwd") == "passwd"
 
     def test_none_filename(self):
-        with pytest.raises(ValueError, match="A PDF file is required"):
+        with pytest.raises(ValueError, match="Se requiere un archivo PDF"):
             validate_original_filename(None)
 
     def test_empty_filename(self):
-        with pytest.raises(ValueError, match="A PDF file is required"):
+        with pytest.raises(ValueError, match="Se requiere un archivo PDF"):
             validate_original_filename("   ")
 
     def test_filename_too_long(self):
         long_filename = "A" * (MAX_ORIGINAL_FILENAME_LENGTH + 1)
-        with pytest.raises(ValueError, match="must not exceed"):
+        with pytest.raises(ValueError, match="no debe superar"):
             validate_original_filename(long_filename)
 
 
@@ -98,15 +98,15 @@ class TestValidatePdfExtension:
         assert validate_pdf_extension("document.PDF") is None
 
     def test_non_pdf_extension(self):
-        with pytest.raises(ValueError, match="Only PDF files are allowed"):
+        with pytest.raises(ValueError, match="Solo se permiten archivos PDF"):
             validate_pdf_extension("document.txt")
 
     def test_double_extension(self):
-        with pytest.raises(ValueError, match="Only PDF files are allowed"):
+        with pytest.raises(ValueError, match="Solo se permiten archivos PDF"):
             validate_pdf_extension("file.pdf.exe")
 
     def test_no_extension(self):
-        with pytest.raises(ValueError, match="Only PDF files are allowed"):
+        with pytest.raises(ValueError, match="Solo se permiten archivos PDF"):
             validate_pdf_extension("document")
 
 
@@ -119,12 +119,12 @@ class TestValidatePdfSize:
         assert validate_pdf_size(content, max_size_bytes=1024) is None
 
     def test_empty_content(self):
-        with pytest.raises(ValueError, match="empty content"):
+        with pytest.raises(ValueError, match="Archivo PDF invalido"):
             validate_pdf_size(b"", max_size_bytes=1024)
 
     def test_oversized(self):
         content = b"%PDF-1.4 " + b"x" * 1000
-        with pytest.raises(ValueError, match="exceeds maximum"):
+        with pytest.raises(ValueError, match="supera el tamano maximo"):
             validate_pdf_size(content, max_size_bytes=500)
 
     def test_exactly_max_size(self):
@@ -140,7 +140,7 @@ class TestValidatePdfSize:
     def test_max_size_plus_one(self):
         max_size = 100
         content = b"%PDF-1.4" + b"x" * (max_size - 7)
-        with pytest.raises(ValueError, match="exceeds maximum"):
+        with pytest.raises(ValueError, match="supera el tamano maximo"):
             validate_pdf_size(content, max_size_bytes=max_size)
 
 
@@ -155,20 +155,20 @@ class TestValidatePdfSignature:
         assert validate_pdf_signature(b"%PDF-1.7") is None
 
     def test_missing_signature(self):
-        with pytest.raises(ValueError, match="missing PDF signature"):
+        with pytest.raises(ValueError, match="Archivo PDF invalido"):
             validate_pdf_signature(b"this is not a pdf")
 
     def test_empty_bytes(self):
-        with pytest.raises(ValueError, match="missing PDF signature"):
+        with pytest.raises(ValueError, match="Archivo PDF invalido"):
             validate_pdf_signature(b"")
 
     def test_signature_at_wrong_position(self):
         # signature not at start
-        with pytest.raises(ValueError, match="missing PDF signature"):
+        with pytest.raises(ValueError, match="Archivo PDF invalido"):
             validate_pdf_signature(b"prefix%PDF-1.4")
 
     def test_partial_signature(self):
-        with pytest.raises(ValueError, match="missing PDF signature"):
+        with pytest.raises(ValueError, match="Archivo PDF invalido"):
             validate_pdf_signature(b"%PDF")  # missing the dash
 
 
@@ -205,7 +205,7 @@ class TestValidateUniqueChecksum:
         class FakeDoc:
             pass
 
-        with pytest.raises(ValueError, match="same checksum already exists"):
+        with pytest.raises(ValueError, match="Ya existe un documento con el mismo checksum"):
             validate_unique_checksum("abc123", existing_document=FakeDoc())
 
 
@@ -220,11 +220,11 @@ class TestValidatePagination:
         assert validate_pagination(5, 20) == (5, 20)
 
     def test_negative_skip(self):
-        with pytest.raises(ValueError, match="skip must be a non-negative"):
+        with pytest.raises(ValueError, match="skip debe ser un entero no negativo"):
             validate_pagination(-1, 10)
 
     def test_negative_limit(self):
-        with pytest.raises(ValueError, match="limit must be a positive"):
+        with pytest.raises(ValueError, match="limit debe ser un entero positivo"):
             validate_pagination(0, -5)
 
     def test_limit_too_high(self):
@@ -234,13 +234,13 @@ class TestValidatePagination:
         assert skip == 0
 
     def test_zero_limit(self):
-        with pytest.raises(ValueError, match="limit must be a positive"):
+        with pytest.raises(ValueError, match="limit debe ser un entero positivo"):
             validate_pagination(0, 0)
 
     def test_invalid_types(self):
-        with pytest.raises(ValueError, match="skip must be a non-negative"):
+        with pytest.raises(ValueError, match="skip debe ser un entero no negativo"):
             validate_pagination("five", 10)
-        with pytest.raises(ValueError, match="limit must be a positive"):
+        with pytest.raises(ValueError, match="limit debe ser un entero positivo"):
             validate_pagination(0, "ten")
 
     def test_limit_exactly_max(self):
@@ -256,19 +256,19 @@ class TestValidateDocumentId:
         assert validate_document_id(42) == 42
 
     def test_zero(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ValueError, match="El ID del documento debe ser un entero positivo"):
             validate_document_id(0)
 
     def test_negative(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ValueError, match="El ID del documento debe ser un entero positivo"):
             validate_document_id(-5)
 
     def test_non_int(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ValueError, match="El ID del documento debe ser un entero positivo"):
             validate_document_id("abc")
 
     def test_float(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ValueError, match="El ID del documento debe ser un entero positivo"):
             validate_document_id(3.14)
 
 
@@ -286,31 +286,31 @@ class TestValidatePdfFileOnDisk:
 
     def test_file_not_found(self, tmp_path):
         missing = tmp_path / "missing.pdf"
-        with pytest.raises(ValueError, match="File not found"):
+        with pytest.raises(ValueError, match="Archivo no encontrado"):
             validate_pdf_file_on_disk(missing, 100, 1024)
 
     def test_wrong_extension(self, tmp_path):
         txt = tmp_path / "test.txt"
         txt.write_bytes(b"%PDF-1.4 some text")
-        with pytest.raises(ValueError, match="Only PDF files are allowed"):
+        with pytest.raises(ValueError, match="Solo se permiten archivos PDF"):
             validate_pdf_file_on_disk(txt, 17, 1024)
 
     def test_size_mismatch(self, tmp_path):
         pdf = tmp_path / "test.pdf"
         content = b"%PDF-1.4 test"
         pdf.write_bytes(content)
-        with pytest.raises(ValueError, match="size mismatch"):
+        with pytest.raises(ValueError, match="Tamanio de archivo incorrecto"):
             validate_pdf_file_on_disk(pdf, 999, 1024)
 
     def test_oversized_file(self, tmp_path):
         pdf = tmp_path / "test.pdf"
         content = b"%PDF-1.4 " + b"x" * 200
         pdf.write_bytes(content)
-        with pytest.raises(ValueError, match="exceeds maximum"):
+        with pytest.raises(ValueError, match="supera el tamano maximo"):
             validate_pdf_file_on_disk(pdf, len(content), 100)
 
     def test_invalid_signature(self, tmp_path):
         pdf = tmp_path / "test.pdf"
         pdf.write_bytes(b"not a pdf signature but has .pdf extension")
-        with pytest.raises(ValueError, match="missing PDF signature"):
+        with pytest.raises(ValueError, match="Archivo PDF invalido"):
             validate_pdf_file_on_disk(pdf, len(pdf.read_bytes()), 1024)
