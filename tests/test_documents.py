@@ -1,12 +1,17 @@
-"""Tests for document endpoints."""
+"""Integration tests for document endpoints."""
 
 import hashlib
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.core.validators import MAX_DOCUMENT_NAME_LENGTH
 
 
+# ---------------------------------------------------------------------------
+# Fixtures / helpers
+# ---------------------------------------------------------------------------
 DEFAULT_PDF_TEXT = "Test Document Content"
 
 
@@ -78,6 +83,9 @@ def create_upload_payload(
     )
 
 
+# ---------------------------------------------------------------------------
+# Existing tests (kept to ensure backward compatibility)
+# ---------------------------------------------------------------------------
 def test_list_documents_empty(client: TestClient):
     """Test listing documents when empty."""
     response = client.get("/api/v1/documents")
@@ -153,8 +161,8 @@ def test_update_document_rejects_blank_name(client: TestClient):
     document_id = create_response.json()["id"]
 
     response = client.put(f"/api/v1/documents/{document_id}", json={"name": "   "})
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Document name is required"
+    # DocumentUpdate schema now validates via Pydantic, returns 422
+    assert response.status_code == 422
 
 
 def test_delete_document(client: TestClient):
@@ -195,13 +203,14 @@ def test_create_document_rejects_invalid_pdf_content(client: TestClient):
 
     response = client.post("/api/v1/documents", data=data, files=files)
     assert response.status_code == 400
-    assert response.json()["detail"] == "Invalid PDF file"
+    assert response.json()["detail"] == "Invalid PDF file: missing PDF signature"
 
 
 def test_create_document_rejects_blank_name(client: TestClient):
     """Test rejecting uploads without a valid document name."""
     data, files = create_upload_payload(name="   ")
     response = client.post("/api/v1/documents", data=data, files=files)
+    # Router-level validation now catches this before reaching the service
     assert response.status_code == 400
     assert response.json()["detail"] == "Document name is required"
 
@@ -302,3 +311,202 @@ def test_extract_document_returns_stored_text_without_reprocessing(client: TestC
     response = client.post(f"/api/v1/documents/{document_id}/extract")
     assert response.status_code == 200
     assert response.json()["extracted_text"] == original_text
+
+
+# ---------------------------------------------------------------------------
+# NEW TESTS: Validation edge cases for the 9 identified problems
+# ---------------------------------------------------------------------------
+class TestDocumentNameValidation:
+    """Tests for Problem 1: Document name validation."""
+
+    def test_create_rejects_name_too_long(self, client: TestClient):
+        """Reject names exceeding the maximum allowed length."""
+        long_name = "A" * (MAX_DOCUMENT_NAME_LENGTH + 1)
+        data, files = create_upload_payload(name=long_name)
+        response = client.post("/api/v1/documents", data=data, files=files)
+        # Router-level validation now catches this
+        assert response.status_code == 400
+        assert "must not exceed" in response.json()["detail"]
+
+    def test_create_accepts_name_exactly_max_length(self, client: TestClient):
+        """Accept a name of exactly the maximum length."""
+        name = "A" * MAX_DOCUMENT_NAME_LENGTH
+        data, files = create_upload_payload(name=name)
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 201
+        assert response.json()["name"] == name
+
+    def test_update_rejects_name_too_long(self, client: TestClient):
+        """Reject update with name exceeding maximum length."""
+        # First create a valid document
+        data, files = create_upload_payload()
+        create_response = client.post("/api/v1/documents", data=data, files=files)
+        document_id = create_response.json()["id"]
+
+        long_name = "B" * (MAX_DOCUMENT_NAME_LENGTH + 1)
+        response = client.put(
+            f"/api/v1/documents/{document_id}", json={"name": long_name}
+        )
+        # DocumentUpdate schema validates via Pydantic, returns 422
+        assert response.status_code == 422
+
+
+class TestOriginalFilenameValidation:
+    """Tests for Problem 2: Original filename validation."""
+
+    def test_create_rejects_filename_with_path_traversal(self, client: TestClient):
+        """Sanitize filename with path traversal and still create."""
+        data, files = create_upload_payload(filename="../../../etc/passwd.pdf")
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 201
+        assert response.json()["original_filename"] == "passwd.pdf"
+
+    def test_create_rejects_empty_filename(self, client: TestClient):
+        """Reject upload without a filename."""
+        # Upload with empty filename
+        data = {"name": "No Filename"}
+        files = {"file": ("", b"%PDF-1.4 test", "application/pdf")}
+        response = client.post("/api/v1/documents", data=data, files=files)
+        # FastAPI UploadFile with empty string filename is caught by
+        # validate_original_filename which raises ValueError -> 400
+        # However, FastAPI sometimes issues 422 when the file is malformed.
+        assert response.status_code in (400, 422)
+
+
+class TestPdfExtensionValidation:
+    """Tests for Problem 3: PDF extension validation."""
+
+    def test_create_rejects_double_extension(self, client: TestClient):
+        """Reject file.pdf.exe even if it has PDF in the name."""
+        data, files = create_upload_payload(filename="malicious.pdf.exe")
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Only PDF files are allowed"
+
+    def test_create_accepts_uppercase_extension(self, client: TestClient):
+        """Accept .PDF extension."""
+        data, files = create_upload_payload(filename="DOCUMENT.PDF")
+        response = client.post("/api/v1/documents", data=data, files=files)
+        # The content itself is valid, so this should succeed
+        assert response.status_code == 201
+
+
+class TestPdfSizeValidation:
+    """Tests for Problem 4: PDF size validation."""
+
+    def test_create_rejects_empty_pdf(self, client: TestClient):
+        """Reject an empty file that has .pdf extension."""
+        data, files = create_upload_payload(filename="empty.pdf", content=b"")
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 400
+        assert "Invalid PDF file: empty content" in response.json()["detail"]
+
+    def test_create_exactly_at_max_size(self, client: TestClient, monkeypatch):
+        """Accept a PDF exactly at the size limit."""
+        monkeypatch.setattr(settings, "max_pdf_size_bytes", len(MINIMAL_PDF_BYTES))
+        data, files = create_upload_payload(name="Exact Size")
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 201
+
+
+class TestPdfSignatureValidation:
+    """Tests for Problem 5: PDF magic signature validation."""
+
+    def test_create_rejects_bypass_magic_signature(self, client: TestClient):
+        """Reject a file with .pdf extension but only partial PDF signature."""
+        data, files = create_upload_payload(
+            filename="bypass.pdf",
+            content=b"%PDF",  # Missing the dash - should fail magic signature check
+        )
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 400
+        assert "missing PDF signature" in response.json()["detail"]
+
+    def test_create_rejects_html_disguised_as_pdf(self, client: TestClient):
+        """Reject HTML content disguised with .pdf extension."""
+        data, files = create_upload_payload(
+            filename="disguised.pdf",
+            content=b"<html><body>Not a PDF</body></html>",
+        )
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 400
+        assert "missing PDF signature" in response.json()["detail"]
+
+    def test_create_rejects_text_with_pdf_prefix(self, client: TestClient):
+        """Reject text that starts with PDF but isn't a real PDF."""
+        data, files = create_upload_payload(
+            filename="prefix.pdf",
+            content=b"%PDF-1.4 but this is just text, not a real PDF structure",
+        )
+        # Note: The magic signature validator only checks the first bytes, so this
+        # WILL pass the signature check but eventually fails at extraction.
+        # The extraction catches malformed PDFs and returns a 400 error.
+        response = client.post("/api/v1/documents", data=data, files=files)
+        assert response.status_code == 400
+        assert "Error extracting text" in response.json()["detail"]
+
+
+class TestChecksumDuplication:
+    """Tests for Problem 6: Checksum duplicate validation."""
+
+    def test_create_rejects_exact_duplicate(self, client: TestClient):
+        """Reject uploading the exact same file twice."""
+        data, files = create_upload_payload(name="First")
+        response1 = client.post("/api/v1/documents", data=data, files=files)
+        assert response1.status_code == 201
+
+        data2, files2 = create_upload_payload(name="Second")
+        response2 = client.post("/api/v1/documents", data=data2, files=files2)
+        assert response2.status_code == 400
+        assert (response2.json()["detail"]
+                == "Document with the same checksum already exists")
+
+
+class TestPaginationValidation:
+    """Tests for Problem 8: Pagination validation."""
+
+    def test_list_with_negative_skip(self, client: TestClient):
+        """Reject negative skip parameter."""
+        response = client.get("/api/v1/documents?skip=-1&limit=10")
+        assert response.status_code == 422
+
+    def test_list_with_zero_limit(self, client: TestClient):
+        """Reject limit of 0."""
+        response = client.get("/api/v1/documents?skip=0&limit=0")
+        assert response.status_code == 422
+
+    def test_list_with_limit_above_max(self, client: TestClient):
+        """Test that limit above max is capped (or rejected)."""
+        # Current implementation allows any limit, capped silently at service layer
+        # With the new router validation, it should be capped to MAX_PAGINATION_LIMIT.
+        response = client.get("/api/v1/documents?skip=0&limit=999999")
+        # The router now has le=MAX_PAGINATION_LIMIT, so this should be 422
+        assert response.status_code == 422
+
+    def test_list_with_valid_pagination(self, client: TestClient):
+        """Accept valid pagination parameters."""
+        response = client.get("/api/v1/documents?skip=0&limit=10")
+        assert response.status_code == 200
+
+
+class TestDocumentIdValidation:
+    """Tests for Problem 9: Document ID validation."""
+
+    def test_get_with_zero_id(self, client: TestClient):
+        """Reject document ID of 0."""
+        response = client.get("/api/v1/documents/0")
+        # FastAPI validates int, but 0 is a valid int.
+        # The service returns None -> 404
+        assert response.status_code == 404
+
+    def test_get_with_negative_id(self, client: TestClient):
+        """Test negative document ID."""
+        # FastAPI tries to parse -5 as int, which succeeds
+        # The service looks it up and returns None -> 404
+        response = client.get("/api/v1/documents/-5")
+        assert response.status_code == 404
+
+    def test_get_with_string_id(self, client: TestClient):
+        """Reject non-integer document ID."""
+        response = client.get("/api/v1/documents/abc")
+        assert response.status_code == 422

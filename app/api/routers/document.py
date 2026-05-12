@@ -1,10 +1,17 @@
 """Document API endpoints."""
 
-from typing import List
-from typing import Any
+from typing import Any, List
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
+from app.config import settings
+from app.core.validators import (
+    MAX_PAGINATION_LIMIT,
+    validate_document_id,
+    validate_document_name,
+    validate_original_filename,
+    validate_pagination,
+)
 from app.schemas import DocumentResponse, DocumentUpdate
 from app.services import DocumentService
 from app.utils.database import get_db
@@ -13,7 +20,7 @@ router = APIRouter(prefix="/documents", tags=["documentos"])
 
 
 def get_document_service(db: Any = Depends(get_db)) -> DocumentService:
-    """Dependencia para obtener el servicio de documentos."""
+    """Dependency to obtain the document service."""
     return DocumentService(db)
 
 
@@ -28,21 +35,22 @@ async def create_document(
     file: UploadFile = File(..., description="Archivo PDF a registrar"),
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
-    """
-    Crear un nuevo documento a partir de un archivo PDF subido.
-    El PDF se valida y se procesa completamente en memoria.
+    """Create a new document from an uploaded PDF.
 
-    Args:
-        name: Nombre del documento
-        file: Archivo PDF subido por el cliente
-        service: Servicio de documentos
-
-    Returns:
-        Documento creado
+    Validates the document name and the uploaded file on the router layer,
+    then delegates business logic to the service.
     """
+    # Layer 1: Router-level validation (fail fast)
+    try:
+        validated_name = validate_document_name(name)
+        if file.filename:
+            validate_original_filename(file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     try:
         file_content = await file.read()
-        return service.create_document(name, file.filename, file_content)
+        return service.create_document(validated_name, file.filename, file_content)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     finally:
@@ -53,21 +61,13 @@ async def create_document(
     "", response_model=List[DocumentResponse], summary="Listar todos los documentos"
 )
 async def list_documents(
-    skip: int = 0,
-    limit: int = 10,
+    skip: int = Query(0, ge=0, description="Cantidad de registros a omitir"),
+    limit: int = Query(
+        10, ge=1, le=MAX_PAGINATION_LIMIT, description="Cantidad maxima de registros"
+    ),
     service: DocumentService = Depends(get_document_service),
 ) -> List[DocumentResponse]:
-    """
-    Listar todos los documentos con paginacion.
-
-    Args:
-        skip: Cantidad de registros a omitir
-        limit: Cantidad maxima de registros
-        service: Servicio de documentos
-
-    Returns:
-        Lista de documentos
-    """
+    """List all documents with validated pagination."""
     return service.get_all_documents(skip, limit)
 
 
@@ -79,19 +79,7 @@ async def list_documents(
 async def get_document(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
-    """
-    Obtener un documento por su ID.
-
-    Args:
-        document_id: ID del documento
-        service: Servicio de documentos
-
-    Returns:
-        Detalle del documento
-
-    Raises:
-        HTTPException: Si el documento no existe
-    """
+    """Get a document by ID."""
     document = service.get_document(document_id)
     if not document:
         raise HTTPException(
@@ -111,20 +99,7 @@ async def update_document(
     document_data: DocumentUpdate,
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
-    """
-    Actualizar un documento.
-
-    Args:
-        document_id: ID del documento
-        document_data: Datos del documento a actualizar
-        service: Servicio de documentos
-
-    Returns:
-        Documento actualizado
-
-    Raises:
-        HTTPException: Si el documento no existe
-    """
+    """Update a document."""
     try:
         document = service.update_document(document_id, document_data)
         if not document:
@@ -145,16 +120,7 @@ async def update_document(
 async def delete_document(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ):
-    """
-    Eliminar un documento.
-
-    Args:
-        document_id: ID del documento
-        service: Servicio de documentos
-
-    Raises:
-        HTTPException: Si el documento no existe
-    """
+    """Delete a document."""
     success = service.delete_document(document_id)
     if not success:
         raise HTTPException(
@@ -171,20 +137,7 @@ async def delete_document(
 async def extract_text(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
-    """
-    Obtener el texto real de un documento PDF.
-    Si el documento ya fue procesado en memoria, devuelve el resultado almacenado.
-
-    Args:
-        document_id: ID del documento
-        service: Servicio de documentos
-
-    Returns:
-        Documento con el texto extraido
-
-    Raises:
-        HTTPException: Si el documento no existe o falla la extraccion
-    """
+    """Get or complete the extracted text of a document."""
     try:
         document = service.extract_text(document_id)
         if not document:
