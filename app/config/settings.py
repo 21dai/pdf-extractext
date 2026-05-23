@@ -23,14 +23,8 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "mongodb://localhost:27017"
     database_name: str = "pdf_extract"
-    database_username: str = ""
-    database_password: str = ""
     database_timeout_ms: int = 3000
     max_pdf_size_bytes: int = 10 * 1024 * 1024
-
-    # MongoDB Root Credentials (used by Docker, but defined here to avoid validation errors)
-    root_username: str = ""
-    root_password: str = ""
 
     # API
     api_v1_prefix: str = "/api/v1"
