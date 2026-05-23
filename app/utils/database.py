@@ -22,8 +22,17 @@ def get_client() -> MongoClient:
             ) from exc
         return mongomock.MongoClient()
 
+    if settings.database_username and settings.database_password:
+        db_url = settings.database_url.replace(
+            "mongodb://",
+            f"mongodb://{settings.database_username}:{settings.database_password}@",
+            1,
+        )
+    else:
+        db_url = settings.database_url
+
     return MongoClient(
-        settings.database_url,
+        db_url,
         serverSelectionTimeoutMS=settings.database_timeout_ms,
     )
 
