@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     database_timeout_ms: int = 3000
     max_pdf_size_bytes: int = 10 * 1024 * 1024
 
+    # MongoDB Auth
+    root_username: str = ""
+    root_password: str = ""
+
     # API
     api_v1_prefix: str = "/api/v1"
     api_docs_url: Optional[str] = "/docs"

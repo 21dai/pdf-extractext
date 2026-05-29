@@ -25,6 +25,8 @@ def get_client() -> MongoClient:
     return MongoClient(
         settings.database_url,
         serverSelectionTimeoutMS=settings.database_timeout_ms,
+        username=settings.root_username or None,
+        password=settings.root_password or None,
     )
 
 

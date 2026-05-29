@@ -1,28 +1,18 @@
 services:
-  mongodb:
-    image: mongo:8.0
-    container_name: pdf-extract-mongo
-    restart: unless-stopped
+  mongo:
+    image: mongo:7-jammy
+    restart: always
     ports:
-      - "27017:27017"
+      - 27017:27017
+    networks:
+      - mired
     environment:
-      MONGO_INITDB_DATABASE: pdf_extract
+      - MONGO_INITDB_ROOT_USERNAME=${ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${ROOT_PASSWORD}
+    command: --wiredTigerCacheSizeGB 0.5
     volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "mongosh",
-          "--quiet",
-          "mongodb://localhost:27017/admin",
-          "--eval",
-          "db.runCommand({ ping: 1 }).ok",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+      - ./data:/data/db
 
-volumes:
-  mongo_data:
+networks:
+    mired:
+        external: true
