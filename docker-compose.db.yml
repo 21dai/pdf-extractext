@@ -1,0 +1,41 @@
+services:
+  mongo:
+    image: mongo:7-jammy
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DATABASE_NAME:-pdf_extract}
+    command: --wiredTigerCacheSizeGB 0.5
+    volumes:
+      - mongo_data_dev:/data/db
+    networks:
+      - pdf_extract_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "-u",
+          "${ROOT_USERNAME}",
+          "-p",
+          "${ROOT_PASSWORD}",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand({ ping: 1 }).ok",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mongo_data_dev:
+
+networks:
+  pdf_extract_network:
+    name: pdf_extract_network

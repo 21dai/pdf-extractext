@@ -1,101 +1,250 @@
 # API de Extraccion de PDF
 
-API construida con FastAPI y arquitectura de 3 capas para registrar PDFs, validar su contenido, evitar duplicados por checksum y extraer texto real. El proyecto procesa el PDF en memoria y persiste los metadatos y el texto extraido en MongoDB.
+API construida con FastAPI para registrar documentos PDF, validar su formato y tamanio, extraer texto en memoria, calcular checksum y persistir la informacion en MongoDB.
+
+El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion trabaja con arquitectura de 3 capas y usa Docker para separar la base de datos de la aplicacion.
 
 ## Integrantes
+
 - Gabriel Flores
 - Lucas Martinez
 - Daiana Galdeano
 - Solange Parada
 - Joaquin Antequeda
-- Nicolas Santivañez
+- Nicolas Santivanez
 
 ## Estado actual
 
-- Upload real de archivos PDF con `multipart/form-data`
-- Validacion de extension, firma PDF y tamano maximo
-- Checksum SHA-256 para evitar duplicados
-- Extraccion de texto con `pypdf`
-- Persistencia en MongoDB
-- Tests automatizados con `mongomock`
-- Documentacion interactiva en `Swagger UI`
+- Upload real de archivos PDF con `multipart/form-data`.
+- Validacion de nombre, extension `.pdf`, firma `%PDF-` y tamanio maximo.
+- Extraccion de texto con `pypdf` usando memoria, sin guardar temporalmente el PDF en disco.
+- Calculo de checksum SHA-256.
+- Rechazo de documentos duplicados por checksum.
+- Persistencia en MongoDB.
+- CRUD de documentos persistidos.
+- Respuestas de error compatibles con Problem Details para casos especificos.
+- Tests automatizados con `pytest` y `mongomock`.
+- Imagen Docker propia para la API.
+- Docker Compose separado para base de datos y aplicacion.
 
 ## Arquitectura
 
-### 1. Capa de presentacion
-- Ubicacion: `app/api/routers/`
-- Responsabilidad: recibir requests HTTP y devolver responses
+El proyecto sigue una arquitectura de 3 capas:
 
-### 2. Capa de logica
-- Ubicacion: `app/services/`
-- Responsabilidad: validaciones, reglas de negocio y extraccion
+```text
+Router -> Service -> Repository -> MongoDB
+```
+
+### 1. Capa de presentacion
+
+Ubicacion:
+
+- `app/api/routers/`
+
+Responsabilidades:
+
+- Recibir requests HTTP.
+- Validar parametros basicos de entrada.
+- Transformar errores de negocio en respuestas HTTP.
+- Devolver respuestas JSON.
+
+### 2. Capa de logica de negocio
+
+Ubicacion:
+
+- `app/services/`
+- `app/core/validators.py`
+
+Responsabilidades:
+
+- Validar reglas del documento.
+- Calcular checksum.
+- Evitar duplicados.
+- Extraer texto desde memoria.
+- Coordinar el flujo de alta, consulta, actualizacion y eliminacion.
 
 ### 3. Capa de datos
-- Ubicacion: `app/repositories/`
-- Responsabilidad: persistencia en MongoDB
 
-## Documentacion util
+Ubicacion:
 
-- `START_HERE.md`: punto de entrada rapido
-- `QUICKSTART.md`: arranque en pocos minutos
-- `DEMO.md`: guion sugerido para mostrar en clase
-- `REVISION_ENUNCIADO.md`: chequeo punto por punto contra el TP
-- `ARCHITECTURE.md`: resumen de arquitectura actual
-- `EJEMPLOS.md`: ejemplos de requests y respuestas
-- `VISUAL_GUIDE.md`: vista visual del flujo principal
+- `app/repositories/`
+- `app/utils/database.py`
+
+Responsabilidades:
+
+- Conectarse a MongoDB.
+- Crear indices.
+- Persistir documentos.
+- Consultar, actualizar y eliminar registros.
+- Manejar el contador secuencial de IDs.
+
+## Persistencia
+
+La base de datos usada es MongoDB.
+
+Colecciones principales:
+
+- `documents`
+- `counters`
+
+Campos principales guardados por documento:
+
+- `id`
+- `name`
+- `original_filename`
+- `file_path`
+- `checksum`
+- `file_size`
+- `extracted_text`
+- `is_processed`
+- `created_at`
+- `updated_at`
+
+Nota importante: el PDF original no se guarda como binario en MongoDB. El texto se extrae desde los bytes recibidos en memoria y se persisten los metadatos junto con el texto extraido.
+
+## Docker
+
+El proyecto separa los servicios en archivos distintos:
+
+- `Dockerfile`: define la imagen de la API FastAPI.
+- `docker-compose.db.yml`: levanta MongoDB como servicio separado.
+- `docker-compose.yml`: levanta la aplicacion usando la imagen construida desde el `Dockerfile`.
+- `.dockerignore`: evita copiar archivos innecesarios dentro de la imagen.
+
+Dentro de Docker, la API se conecta a MongoDB usando el nombre del servicio:
+
+```text
+mongo:27017
+```
+
+Desde la maquina local, la conexion a MongoDB se hace por:
+
+```text
+localhost:27017
+```
 
 ## Requisitos
 
 - Python 3.13+
-- `uv` disponible
-- Docker Desktop con Docker Compose
+- `uv`
+- Docker Desktop
+- Docker Compose
 
-## Instalacion
+## Variables de entorno
 
-### Opcion recomendada con uv
+Crear el archivo `.env` a partir de `.env.example`:
 
-```bash
-cd pdf-extractext
-uv sync --extra dev
+```powershell
 copy .env.example .env
 ```
 
-### Opcion alternativa con pip
+Variables principales:
 
-```bash
-cd pdf-extractext
-python -m venv venv
-venv\Scripts\activate
-python -m pip install -e ".[dev]"
-copy .env.example .env
+```env
+APP_NAME=PDF Extract API
+APP_VERSION=0.1.0
+DEBUG=False
+
+HOST=0.0.0.0
+PORT=8000
+
+DATABASE_URL=mongodb://admin:9009@localhost:27017/?authSource=admin
+DATABASE_NAME=pdf_extract
+DATABASE_TIMEOUT_MS=3000
+MAX_PDF_SIZE_BYTES=10485760
+
+API_V1_PREFIX=/api/v1
+API_DOCS_URL=/docs
+API_REDOC_URL=/redoc
+API_OPENAPI_URL=/openapi.json
+
+ROOT_USERNAME=admin
+ROOT_PASSWORD=9009
 ```
 
-## Arranque rapido con Mongo real
+## Ejecucion con Docker
 
-1. Levantar MongoDB con Docker:
+Desde la raiz del proyecto:
 
-```bash
-docker compose up -d
+```powershell
+cd "h:\Mi unidad\Facultad\Facultad_2026\Desarrollo\Proyecto\pdf-extractext"
 ```
 
-2. Verificar que el contenedor este sano:
+Levantar MongoDB:
 
-```bash
+```powershell
+docker compose -f docker-compose.db.yml up -d
+```
+
+Construir y levantar la API:
+
+```powershell
+docker compose up -d --build
+```
+
+Verificar contenedores:
+
+```powershell
+docker compose -f docker-compose.db.yml ps
 docker compose ps
 ```
 
-3. Levantar la API:
+Ver logs de la API:
 
-```bash
+```powershell
+docker logs -f pdf-extractext-api-1
+```
+
+Apagar todo:
+
+```powershell
+docker compose -f docker-compose.db.yml -f docker-compose.yml down
+```
+
+## Ejecucion local
+
+Tambien se puede correr la API localmente, usando MongoDB en Docker.
+
+Instalar dependencias:
+
+```powershell
+uv sync --extra dev
+```
+
+Levantar MongoDB:
+
+```powershell
+docker compose -f docker-compose.db.yml up -d
+```
+
+Correr la API:
+
+```powershell
+uv run python main.py
+```
+
+Alternativa si el entorno ya tiene dependencias instaladas:
+
+```powershell
 python main.py
 ```
 
 ## URLs utiles
 
 - API: `http://localhost:8000`
-- Swagger: `http://localhost:8000/docs`
+- Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
-- Health: `http://localhost:8000/health`
+- Healthcheck: `http://localhost:8000/health`
+
+Respuesta esperada del healthcheck:
+
+```json
+{
+  "status": "ok",
+  "database": "mongodb",
+  "database_name": "pdf_extract"
+}
+```
 
 ## Endpoints principales
 
@@ -110,21 +259,17 @@ python main.py
 ## Flujo principal
 
 1. El cliente sube un PDF con `name` y `file`.
-2. La API valida que sea un PDF real.
-3. Se calcula el checksum.
-4. Si el checksum ya existe, el documento se rechaza.
-5. Si es valido, se extrae el texto en memoria.
-6. Se guarda el documento en MongoDB.
+2. La API lee el archivo en memoria.
+3. Se valida nombre, extension, firma y tamanio.
+4. Se calcula el checksum SHA-256.
+5. Si el checksum ya existe, el documento se rechaza.
+6. Si es valido, se extrae el texto desde memoria usando `pypdf`.
+7. Se guarda el documento en MongoDB con sus metadatos y texto extraido.
+8. La API devuelve el documento creado.
 
-## Limitacion conocida
+## Ejemplo con curl
 
-Si el PDF contiene solo imagenes o escaneos, `extracted_text` puede venir vacio.
-
-Eso no implica un error de la API. La extraccion actual usa `pypdf`, que obtiene texto digital, pero no realiza OCR.
-
-## Ejemplo de uso con curl
-
-```bash
+```powershell
 curl -X POST "http://localhost:8000/api/v1/documents" ^
   -H "accept: application/json" ^
   -H "Content-Type: multipart/form-data" ^
@@ -143,49 +288,87 @@ Respuesta esperada:
   "checksum": "sha256...",
   "extracted_text": "Texto extraido del PDF",
   "is_processed": true,
-  "created_at": "2026-04-25T23:56:47.157530Z",
-  "updated_at": "2026-04-25T23:56:47.157530Z"
+  "created_at": "2026-06-03T20:00:00.000000Z",
+  "updated_at": "2026-06-03T20:00:00.000000Z"
 }
 ```
 
 ## Tests
 
-```bash
+Ejecutar la suite:
+
+```powershell
 python -m pytest -q
 ```
 
-Resultado esperado:
+Resultado esperado actual:
 
 ```text
-16 passed
+72 passed
 ```
 
-## Variables de entorno
+Los tests cubren:
 
-```env
-APP_NAME=API de Extraccion de PDF
-APP_VERSION=0.1.0
-DEBUG=False
-HOST=0.0.0.0
-PORT=8000
-DATABASE_URL=mongodb://localhost:27017
-DATABASE_NAME=pdf_extract
-DATABASE_TIMEOUT_MS=3000
-MAX_PDF_SIZE_BYTES=10485760
-API_V1_PREFIX=/api/v1
-API_DOCS_URL=/docs
-API_REDOC_URL=/redoc
-API_OPENAPI_URL=/openapi.json
+- Healthcheck.
+- Alta de documentos.
+- Lectura/listado.
+- Actualizacion.
+- Eliminacion.
+- Extraccion de texto.
+- Validaciones de nombre, PDF, tamanio, checksum y paginacion.
+- Errores controlados.
+
+## Documentacion util
+
+- `START_HERE.md`: punto de entrada rapido.
+- `QUICKSTART.md`: arranque en pocos minutos.
+- `DEMO.md`: guion sugerido para mostrar en clase.
+- `REVISION_ENUNCIADO.md`: chequeo punto por punto contra el TP.
+- `ARCHITECTURE.md`: resumen de arquitectura actual.
+- `EJEMPLOS.md`: ejemplos de requests y respuestas.
+- `VISUAL_GUIDE.md`: vista visual del flujo principal.
+- `TESTING_MANUAL.md`: guia de pruebas manuales.
+
+## Limitacion conocida
+
+La extraccion actual usa `pypdf`, por lo que obtiene texto digital embebido en el PDF.
+
+Si el PDF es escaneado o contiene solo imagenes, `extracted_text` puede quedar vacio. Eso no significa que la API falle: significa que no se esta aplicando OCR.
+
+## Comandos utiles
+
+Reconstruir la API:
+
+```powershell
+docker compose up -d --build --force-recreate
 ```
 
-## Apagar Mongo
+Ver logs de MongoDB:
 
-```bash
+```powershell
+docker logs -f pdf-extractext-mongo-1
+```
+
+Ver logs de la API:
+
+```powershell
+docker logs -f pdf-extractext-api-1
+```
+
+Apagar solo la API:
+
+```powershell
 docker compose down
 ```
 
-Para borrar tambien los datos locales:
+Apagar solo MongoDB:
 
-```bash
-docker compose down -v
+```powershell
+docker compose -f docker-compose.db.yml down
+```
+
+Borrar tambien el volumen de MongoDB:
+
+```powershell
+docker compose -f docker-compose.db.yml down -v
 ```
