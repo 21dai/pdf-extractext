@@ -22,10 +22,12 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 - Rechazo de documentos duplicados por checksum.
 - Persistencia en MongoDB.
 - CRUD de documentos persistidos.
+- Resumen de documentos con Ollama local.
+- Endpoint de resumen protegido con header `X-API-Key`.
 - Respuestas de error compatibles con Problem Details para casos especificos.
 - Tests automatizados con `pytest` y `mongomock`.
 - Imagen Docker propia para la API.
-- Docker Compose separado para base de datos y aplicacion.
+- Docker Compose separado para base de datos, Ollama y aplicacion.
 
 ## Arquitectura
 
@@ -108,6 +110,7 @@ El proyecto separa los servicios en archivos distintos:
 
 - `Dockerfile`: define la imagen de la API FastAPI.
 - `docker-compose.db.yml`: levanta MongoDB como servicio separado.
+- `docker-compose.ollama.yml`: levanta Ollama como servicio local para resumenes.
 - `docker-compose.yml`: levanta la aplicacion usando la imagen construida desde el `Dockerfile`.
 - `.dockerignore`: evita copiar archivos innecesarios dentro de la imagen.
 
@@ -121,6 +124,12 @@ Desde la maquina local, la conexion a MongoDB se hace por:
 
 ```text
 localhost:27017
+```
+
+Dentro de Docker, la API se conecta a Ollama usando el nombre del servicio:
+
+```text
+ollama:11434
 ```
 
 ## Requisitos
@@ -144,6 +153,7 @@ Variables principales:
 APP_NAME=PDF Extract API
 APP_VERSION=0.1.0
 DEBUG=False
+APP_API_KEY=dev-api-key
 
 HOST=0.0.0.0
 PORT=8000
@@ -152,6 +162,11 @@ DATABASE_URL=mongodb://admin:9009@localhost:27017/?authSource=admin
 DATABASE_NAME=pdf_extract
 DATABASE_TIMEOUT_MS=3000
 MAX_PDF_SIZE_BYTES=10485760
+
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:1b
+OLLAMA_TIMEOUT_SECONDS=60
+OLLAMA_SUMMARY_MAX_CHARS=12000
 
 API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
@@ -176,6 +191,18 @@ Levantar MongoDB:
 docker compose -f docker-compose.db.yml up -d
 ```
 
+Levantar Ollama:
+
+```powershell
+docker compose -f docker-compose.ollama.yml up -d
+```
+
+Descargar el modelo local la primera vez:
+
+```powershell
+docker exec -it pdf-extractext-ollama-1 ollama pull llama3.2:1b
+```
+
 Construir y levantar la API:
 
 ```powershell
@@ -186,6 +213,7 @@ Verificar contenedores:
 
 ```powershell
 docker compose -f docker-compose.db.yml ps
+docker compose -f docker-compose.ollama.yml ps
 docker compose ps
 ```
 
@@ -198,7 +226,9 @@ docker logs -f pdf-extractext-api-1
 Apagar todo:
 
 ```powershell
-docker compose -f docker-compose.db.yml -f docker-compose.yml down
+docker compose -f docker-compose.yml down
+docker compose -f docker-compose.ollama.yml down
+docker compose -f docker-compose.db.yml down
 ```
 
 ## Ejecucion local
@@ -215,6 +245,13 @@ Levantar MongoDB:
 
 ```powershell
 docker compose -f docker-compose.db.yml up -d
+```
+
+Levantar Ollama:
+
+```powershell
+docker compose -f docker-compose.ollama.yml up -d
+docker exec -it pdf-extractext-ollama-1 ollama pull llama3.2:1b
 ```
 
 Correr la API:
@@ -254,6 +291,7 @@ Respuesta esperada del healthcheck:
 - `PUT /api/v1/documents/{document_id}`
 - `DELETE /api/v1/documents/{document_id}`
 - `POST /api/v1/documents/{document_id}/extract`
+- `POST /api/v1/documents/{document_id}/summary`
 - `GET /health`
 
 ## Flujo principal
@@ -293,6 +331,27 @@ Respuesta esperada:
 }
 ```
 
+## Ejemplo de resumen con Ollama
+
+El endpoint de resumen esta protegido con `X-API-Key`.
+
+```powershell
+curl -X POST "http://localhost:8000/api/v1/documents/1/summary" ^
+  -H "accept: application/json" ^
+  -H "X-API-Key: dev-api-key"
+```
+
+Respuesta esperada:
+
+```json
+{
+  "document_id": 1,
+  "model": "llama3.2:1b",
+  "summary": "Resumen generado a partir del texto extraido.",
+  "source_text_length": 2500
+}
+```
+
 ## Tests
 
 Ejecutar la suite:
@@ -304,7 +363,7 @@ python -m pytest -q
 Resultado esperado actual:
 
 ```text
-72 passed
+77 passed
 ```
 
 Los tests cubren:
@@ -315,6 +374,7 @@ Los tests cubren:
 - Actualizacion.
 - Eliminacion.
 - Extraccion de texto.
+- Resumen de texto protegido por API key.
 - Validaciones de nombre, PDF, tamanio, checksum y paginacion.
 - Errores controlados.
 
@@ -335,6 +395,8 @@ La extraccion actual usa `pypdf`, por lo que obtiene texto digital embebido en e
 
 Si el PDF es escaneado o contiene solo imagenes, `extracted_text` puede quedar vacio. Eso no significa que la API falle: significa que no se esta aplicando OCR.
 
+El resumen depende de que Ollama este levantado y de que el modelo configurado en `OLLAMA_MODEL` haya sido descargado previamente.
+
 ## Comandos utiles
 
 Reconstruir la API:
@@ -347,6 +409,12 @@ Ver logs de MongoDB:
 
 ```powershell
 docker logs -f pdf-extractext-mongo-1
+```
+
+Ver logs de Ollama:
+
+```powershell
+docker logs -f pdf-extractext-ollama-1
 ```
 
 Ver logs de la API:
@@ -365,6 +433,12 @@ Apagar solo MongoDB:
 
 ```powershell
 docker compose -f docker-compose.db.yml down
+```
+
+Apagar solo Ollama:
+
+```powershell
+docker compose -f docker-compose.ollama.yml down
 ```
 
 Borrar tambien el volumen de MongoDB:

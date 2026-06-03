@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_name: str = "API de Extraccion de PDF"
     app_version: str = "0.1.0"
     debug: bool = False
+    app_api_key: str = ""
 
     # Server
     host: str = "0.0.0.0"
@@ -29,6 +30,12 @@ class Settings(BaseSettings):
     # MongoDB Auth
     root_username: str = ""
     root_password: str = ""
+
+    # Ollama
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2:1b"
+    ollama_timeout_seconds: int = 60
+    ollama_summary_max_chars: int = 12000
 
     # API
     api_v1_prefix: str = "/api/v1"

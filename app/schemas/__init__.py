@@ -1,5 +1,15 @@
 """Pydantic schemas for API"""
 
-from .document import DocumentCreate, DocumentUpdate, DocumentResponse
+from .document import (
+    DocumentCreate,
+    DocumentResponse,
+    DocumentSummaryResponse,
+    DocumentUpdate,
+)
 
-__all__ = ["DocumentCreate", "DocumentUpdate", "DocumentResponse"]
+__all__ = [
+    "DocumentCreate",
+    "DocumentResponse",
+    "DocumentSummaryResponse",
+    "DocumentUpdate",
+]

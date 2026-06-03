@@ -8,7 +8,7 @@ from app.config import settings
 from app.core import validators as v
 from app.models import Document
 from app.repositories import DocumentRepository
-from app.schemas import DocumentResponse, DocumentUpdate
+from app.schemas import DocumentResponse, DocumentSummaryResponse, DocumentUpdate
 
 
 class DocumentService:
@@ -137,6 +137,26 @@ class DocumentService:
             return DocumentResponse.model_validate(document)
 
         raise ValueError(self.EXTRACT_ONLY_ON_UPLOAD_MESSAGE)
+
+    def summarize_document(
+        self, document_id: int, summary_service: Any
+    ) -> Optional[DocumentSummaryResponse]:
+        """Generate a summary from the stored extracted text."""
+        document = self.repository.get_by_id(document_id)
+        if not document:
+            return None
+
+        extracted_text = (document.extracted_text or "").strip()
+        if not extracted_text:
+            raise ValueError("El documento no tiene texto extraido para resumir")
+
+        summary = summary_service.summarize(extracted_text)
+        return DocumentSummaryResponse(
+            document_id=int(document.id or document_id),
+            model=getattr(summary_service, "model", settings.ollama_model),
+            summary=summary,
+            source_text_length=len(extracted_text),
+        )
 
     def _normalize_original_filename(self, original_filename: str | None) -> str:
         """Normalize the uploaded filename for safe persistence.
