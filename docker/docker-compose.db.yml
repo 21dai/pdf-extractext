@@ -2,6 +2,8 @@ services:
   mongo:
     image: mongo:7-jammy
     restart: unless-stopped
+    env_file:
+      - ../.env
     ports:
       - "27017:27017"
     environment:

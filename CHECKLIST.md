@@ -9,8 +9,8 @@
 
 ## MongoDB
 
-- [ ] `docker compose up -d` ejecutado
-- [ ] `docker compose ps` muestra `mongodb` levantado
+- [ ] `make up` ejecutado (o `docker compose --env-file .env -f docker/docker-compose.db.yml up -d` para MongoDB manual)
+- [ ] `make ps` muestra `mongodb` levantado
 - [ ] `GET /health` responde `200`
 
 ## API

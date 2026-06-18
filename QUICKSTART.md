@@ -25,8 +25,8 @@ copy .env.example .env
 ### 2. Levantar MongoDB real
 
 ```bash
-docker compose up -d
-docker compose ps
+docker compose --env-file .env -f docker/docker-compose.db.yml up -d
+docker compose --env-file .env -f docker/docker-compose.db.yml ps
 ```
 
 Cuando el servicio `mongodb` figure como `running` o `healthy`, segui con el siguiente paso.
@@ -80,13 +80,13 @@ curl http://localhost:8000/health
 ### Apagar Mongo
 
 ```bash
-docker compose down
+docker compose --env-file .env -f docker/docker-compose.db.yml down
 ```
 
 ### Borrar volumen de Mongo
 
 ```bash
-docker compose down -v
+docker compose --env-file .env -f docker/docker-compose.db.yml down -v
 ```
 
 ## Si no queres usar Mongo real por un momento

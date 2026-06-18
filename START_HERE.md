@@ -19,16 +19,16 @@ Cliente -> Router -> Service -> Repository -> MongoDB
 
 ## Arranque recomendado para clase
 
-### 1. Levantar MongoDB
+### 1. Levantar todo con make
 
 ```bash
-docker compose up -d
+make up
 ```
 
-### 2. Verificar que Mongo este bien
+### 2. Verificar que este todo bien
 
 ```bash
-docker compose ps
+make ps
 ```
 
 ### 3. Ejecutar la API

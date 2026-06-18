@@ -106,13 +106,18 @@ Nota importante: el PDF original no se guarda como binario en MongoDB. El texto 
 
 ## Docker
 
-El proyecto separa los servicios en archivos distintos:
+### Estructura
 
-- `Dockerfile`: define la imagen de la API FastAPI.
-- `docker-compose.db.yml`: levanta MongoDB como servicio separado.
-- `docker-compose.ollama.yml`: levanta Ollama como servicio local para resumenes.
-- `docker-compose.yml`: levanta la aplicacion usando la imagen construida desde el `Dockerfile`.
-- `.dockerignore`: evita copiar archivos innecesarios dentro de la imagen.
+Los archivos de infraestructura Docker se centralizaron en la carpeta `docker/` para mantener la raiz del proyecto limpia:
+
+| Archivo original | Nueva ubicacion |
+|------------------|-----------------|
+| `Dockerfile` | `docker/Dockerfile` |
+| `docker-compose.db.yml` | `docker/docker-compose.db.yml` |
+| `docker-compose.ollama.yml` | `docker/docker-compose.ollama.yml` |
+| `docker-compose.yml` | `docker/docker-compose.yml` |
+
+`.dockerignore` permanece en la raiz y ahora ignora el directorio `docker/` completo.
 
 Dentro de Docker, la API se conecta a MongoDB usando el nombre del servicio:
 
@@ -137,7 +142,10 @@ ollama:11434
 - Python 3.13+
 - `uv`
 - Docker Desktop
-- Docker Compose
+- Docker Compose (V1 o V2)
+- `make` (instalar con `sudo apt install make` en WSL/Linux)
+
+> **Nota sobre Docker Compose**: Si usas Docker Compose V1 (commando `docker-compose` con guion), usa la sintaxis manual con `--env-file .env`. Si usas V2 (commando `docker compose` sin guion), podés agregar el flag `--env-file` en cada comando o usar el `Makefile`.
 
 ## Variables de entorno
 
@@ -179,56 +187,75 @@ ROOT_PASSWORD=9009
 
 ## Ejecucion con Docker
 
-Desde la raiz del proyecto:
+### Opcion rapida (recomendada)
 
-```powershell
-cd "h:\Mi unidad\Facultad\Facultad_2026\Desarrollo\Proyecto\pdf-extractext"
+Desde la raiz del proyecto, usa `make` para levantar todo el stack:
+
+```bash
+make up
 ```
+
+Esto levanta automaticamente: MongoDB → Ollama → API
+
+Otros comandos disponibles:
+
+```bash
+make down   # Apagar todo
+make logs   # Ver logs de la API
+make ps     # Ver estado de los contenedores
+make api    # Levantar solo la API
+make db     # Levantar solo MongoDB
+make ollama # Levantar solo Ollama
+```
+
+### Opcion manual (por servicio)
+
+Si preferis levantar los servicios uno por uno o necesitas mas control, ejecuta los comandos manualmente con `--env-file .env`:
 
 Levantar MongoDB:
 
-```powershell
-docker compose -f docker-compose.db.yml up -d
+```bash
+docker compose --env-file .env -f docker/docker-compose.db.yml up -d
 ```
 
 Levantar Ollama:
 
-```powershell
-docker compose -f docker-compose.ollama.yml up -d
+```bash
+docker compose --env-file .env -f docker/docker-compose.ollama.yml up -d
 ```
 
 Descargar el modelo local la primera vez:
 
-```powershell
+```bash
 docker exec -it pdf-extractext-ollama-1 ollama pull llama3.2:1b
 ```
 
 Construir y levantar la API:
 
-```powershell
-docker compose up -d --build
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up -d --build
 ```
 
 Verificar contenedores:
 
-```powershell
-docker compose -f docker-compose.db.yml ps
-docker compose -f docker-compose.ollama.yml ps
-docker compose ps
+```bash
+docker compose --env-file .env -f docker/docker-compose.db.yml ps
+docker compose --env-file .env -f docker/docker-compose.ollama.yml ps
+docker compose --env-file .env -f docker/docker-compose.yml ps
 ```
 
 Ver logs de la API:
 
-```powershell
-docker logs -f pdf-extractext-api-1
+```bash
+docker logs -f docker_api_1
 ```
 
 Apagar todo:
 
-```powershell
-docker compose -f docker-compose.yml down
-docker compose -f docker-compose.ollama.yml down
-docker compose -f docker-compose.db.yml down
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml down
+docker compose --env-file .env -f docker/docker-compose.ollama.yml down
+docker compose --env-file .env -f docker/docker-compose.db.yml down
 ```
 
 ## Ejecucion local
@@ -243,14 +270,14 @@ uv sync --extra dev
 
 Levantar MongoDB:
 
-```powershell
-docker compose -f docker-compose.db.yml up -d
+```bash
+docker compose --env-file .env -f docker/docker-compose.db.yml up -d
 ```
 
 Levantar Ollama:
 
-```powershell
-docker compose -f docker-compose.ollama.yml up -d
+```bash
+docker compose --env-file .env -f docker/docker-compose.ollama.yml up -d
 docker exec -it pdf-extractext-ollama-1 ollama pull llama3.2:1b
 ```
 
@@ -399,50 +426,64 @@ El resumen depende de que Ollama este levantado y de que el modelo configurado e
 
 ## Comandos utiles
 
+Comandos con `make` (desde la raiz del proyecto):
+
+```bash
+make up          # Levantar todo el stack
+make down        # Apagar todo
+make logs        # Ver logs de la API
+make ps          # Ver estado de los contenedores
+make api         # Levantar solo la API
+make db          # Levantar solo MongoDB
+make ollama      # Levantar solo Ollama
+```
+
+Comandos manuales (por servicio):
+
 Reconstruir la API:
 
-```powershell
-docker compose up -d --build --force-recreate
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml up -d --build --force-recreate
 ```
 
 Ver logs de MongoDB:
 
-```powershell
-docker logs -f pdf-extractext-mongo-1
+```bash
+docker logs -f docker_mongo_1
 ```
 
 Ver logs de Ollama:
 
-```powershell
-docker logs -f pdf-extractext-ollama-1
+```bash
+docker logs -f docker_ollama_1
 ```
 
 Ver logs de la API:
 
-```powershell
-docker logs -f pdf-extractext-api-1
+```bash
+docker logs -f docker_api_1
 ```
 
 Apagar solo la API:
 
-```powershell
-docker compose down
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml down
 ```
 
 Apagar solo MongoDB:
 
-```powershell
-docker compose -f docker-compose.db.yml down
+```bash
+docker compose --env-file .env -f docker/docker-compose.db.yml down
 ```
 
 Apagar solo Ollama:
 
-```powershell
-docker compose -f docker-compose.ollama.yml down
+```bash
+docker compose --env-file .env -f docker/docker-compose.ollama.yml down
 ```
 
 Borrar tambien el volumen de MongoDB:
 
-```powershell
-docker compose -f docker-compose.db.yml down -v
+```bash
+docker compose --env-file .env -f docker/docker-compose.db.yml down -v
 ```

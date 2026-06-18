@@ -35,6 +35,4 @@ dist
 *.egg-info
 
 # Local Docker files not needed inside the image
-docker-compose.yml
-docker-compose.db.yml
-docker-compose.ollama.yml
+docker/

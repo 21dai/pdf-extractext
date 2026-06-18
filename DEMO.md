@@ -21,11 +21,17 @@ Antes de la clase o la demo:
 
 ## Arranque
 
-### 1. Levantar MongoDB
+### 1. Levantar todo con make
 
 ```bash
-docker compose up -d
-docker compose ps
+make up
+```
+
+O si preferis levantar solo MongoDB y la API manualmente:
+
+```bash
+docker compose --env-file .env -f docker/docker-compose.db.yml up -d
+docker compose --env-file .env -f docker/docker-compose.db.yml ps
 ```
 
 Esperado:
