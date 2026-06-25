@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "API de Extraccion de PDF"
-    app_version: str = "0.1.0"
+    app_version: str = "1.0.0"
     debug: bool = False
 
     # Server

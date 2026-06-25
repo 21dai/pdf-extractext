@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: pdf-extractext-api:latest
+    image: pdf-extractext-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ../.env
@@ -11,7 +11,7 @@ services:
       - "${PORT:-8000}:8000"
     environment:
       APP_NAME: ${APP_NAME:-PDF Extract API}
-      APP_VERSION: ${APP_VERSION:-0.1.0}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
       DEBUG: ${DEBUG:-False}
       HOST: 0.0.0.0
       PORT: 8000

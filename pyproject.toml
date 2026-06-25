@@ -1,6 +1,6 @@
 [project]
 name = "pdf-extractext"
-version = "0.1.0"
+version = "1.0.0"
 description = "PDF extraction API with 3-layer architecture"
 readme = "README.md"
 # Actualizamos el requerimiento mínimo a 3.13 para que 'uv' resuelva estrictamente sobre esta base

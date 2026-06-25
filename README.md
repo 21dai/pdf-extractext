@@ -123,6 +123,25 @@ Los archivos de infraestructura Docker se centralizaron en la carpeta `docker/` 
 
 Cambiar de entorno es solo editar `.env`, sin tocar ningun archivo versionado.
 
+### Versionado de la imagen (factor 5: build, release, run)
+
+La imagen de la API se taguea con `IMAGE_TAG` (variable definida en `.env`), nunca con `latest` como release real:
+
+```yaml
+image: pdf-extractext-api:${IMAGE_TAG:-latest}
+```
+
+`latest` queda solo como valor por defecto de conveniencia si no se define `IMAGE_TAG` (por ejemplo, en una build local rapida). Para una release real:
+
+- `IMAGE_TAG` debe coincidir con `APP_VERSION` (definida tambien en `pyproject.toml` y `app/config/settings.py`).
+- Se sigue [Semantic Versioning](https://semver.org/lang/es/) (`MAJOR.MINOR.PATCH`):
+  - **MAJOR**: cambios que rompen compatibilidad (ej. se modifica la forma de un endpoint existente).
+  - **MINOR**: funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo).
+  - **PATCH**: correccion de bugs sin agregar funcionalidad.
+- La version actual, `1.0.0`, corresponde a la primera release estable de la API.
+
+Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`.
+
 ## Requisitos
 
 - Python 3.13+
@@ -145,7 +164,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=0.1.0
+APP_VERSION=1.0.0
+IMAGE_TAG=1.0.0
 DEBUG=False
 
 HOST=0.0.0.0
