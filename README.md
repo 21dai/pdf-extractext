@@ -119,23 +119,12 @@ Los archivos de infraestructura Docker se centralizaron en la carpeta `docker/` 
 
 `.dockerignore` permanece en la raiz y ahora ignora el directorio `docker/` completo.
 
-Dentro de Docker, la API se conecta a MongoDB usando el nombre del servicio:
+`docker-compose.yml` no hardcodea ningun host de backing service: `DATABASE_URL` y `OLLAMA_BASE_URL` se pasan tal cual vienen de `.env` (factor de configuracion 12-factor). El host que va en `.env` depende de donde corra la API:
 
-```text
-mongo:27017
-```
+- API dentro de Docker (`make up` / `docker compose -f docker/docker-compose.yml up`): usar el nombre de servicio de la red Docker, `mongo:27017` y `ollama:11434`.
+- API corriendo localmente fuera de Docker (`python main.py`) contra los contenedores de Mongo/Ollama expuestos: usar `localhost:27017` y `localhost:11434`.
 
-Desde la maquina local, la conexion a MongoDB se hace por:
-
-```text
-localhost:27017
-```
-
-Dentro de Docker, la API se conecta a Ollama usando el nombre del servicio:
-
-```text
-ollama:11434
-```
+Cambiar de entorno es solo editar `.env`, sin tocar ningun archivo versionado.
 
 ## Requisitos
 
@@ -166,12 +155,12 @@ APP_API_KEY=dev-api-key
 HOST=0.0.0.0
 PORT=8000
 
-DATABASE_URL=mongodb://admin:9009@localhost:27017/?authSource=admin
+DATABASE_URL=mongodb://admin:9009@mongo:27017/?authSource=admin
 DATABASE_NAME=pdf_extract
 DATABASE_TIMEOUT_MS=3000
 MAX_PDF_SIZE_BYTES=10485760
 
-OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_MODEL=llama3.2:1b
 OLLAMA_TIMEOUT_SECONDS=60
 OLLAMA_SUMMARY_MAX_CHARS=12000
