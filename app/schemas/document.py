@@ -42,14 +42,3 @@ class DocumentResponse(DocumentBase):
     )
     created_at: datetime = Field(..., description="Fecha de creacion del registro")
     updated_at: datetime = Field(..., description="Fecha de ultima actualizacion")
-
-
-class DocumentSummaryResponse(BaseModel):
-    """Schema for document summary response."""
-
-    document_id: int = Field(..., description="Identificador del documento resumido")
-    model: str = Field(..., description="Modelo local de Ollama utilizado")
-    summary: str = Field(..., description="Resumen generado a partir del texto extraido")
-    source_text_length: int = Field(
-        ..., description="Cantidad de caracteres del texto original usado como fuente"
-    )

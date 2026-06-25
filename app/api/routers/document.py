@@ -1,6 +1,5 @@
 """Document API endpoints."""
 
-import hmac
 from typing import Any, List
 
 from fastapi import (
@@ -8,14 +7,12 @@ from fastapi import (
     Depends,
     File,
     Form,
-    Header,
     HTTPException,
     Query,
     UploadFile,
     status,
 )
 
-from app.config import settings
 from app.core.validators import (
     MAX_PAGINATION_LIMIT,
     validate_document_id,
@@ -23,8 +20,8 @@ from app.core.validators import (
     validate_original_filename,
     validate_pagination,
 )
-from app.schemas import DocumentResponse, DocumentSummaryResponse, DocumentUpdate
-from app.services import DocumentService, OllamaSummaryService
+from app.schemas import DocumentResponse, DocumentUpdate
+from app.services import DocumentService
 from app.utils.database import get_db
 
 router = APIRouter(prefix="/documents", tags=["documentos"])
@@ -33,33 +30,6 @@ router = APIRouter(prefix="/documents", tags=["documentos"])
 def get_document_service(db: Any = Depends(get_db)) -> DocumentService:
     """Dependency to obtain the document service."""
     return DocumentService(db)
-
-
-def get_summary_service() -> OllamaSummaryService:
-    """Dependency to obtain the Ollama summary service."""
-    return OllamaSummaryService()
-
-
-def verify_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
-    """Protect summary endpoints with an API key header."""
-    configured_key = settings.app_api_key.strip()
-    if not configured_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="API key de la aplicacion no configurada",
-        )
-
-    if not x_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Se requiere X-API-Key",
-        )
-
-    if not hmac.compare_digest(x_api_key, configured_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-API-Key invalida",
-        )
 
 
 @router.post(
@@ -192,28 +162,4 @@ async def extract_text(
             == service.EXTRACT_ONLY_ON_UPLOAD_MESSAGE
             else status.HTTP_400_BAD_REQUEST
         )
-        raise HTTPException(status_code=status_code, detail=error_message) 
-
-
-@router.post(
-    "/{document_id}/summary",
-    response_model=DocumentSummaryResponse,
-    summary="Generar resumen local del texto extraido",
-    dependencies=[Depends(verify_api_key)],
-)
-async def summarize_document(
-    document_id: int,
-    service: DocumentService = Depends(get_document_service),
-    summary_service: OllamaSummaryService = Depends(get_summary_service),
-) -> DocumentSummaryResponse:
-    """Generate a summary using a local Ollama model."""
-    try:
-        summary = service.summarize_document(document_id, summary_service)
-        if not summary:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Documento {document_id} no encontrado",
-            )
-        return summary
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(status_code=status_code, detail=error_message)

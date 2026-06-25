@@ -22,12 +22,10 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 - Rechazo de documentos duplicados por checksum.
 - Persistencia en MongoDB.
 - CRUD de documentos persistidos.
-- Resumen de documentos con Ollama local.
-- Endpoint de resumen protegido con header `X-API-Key`.
 - Respuestas de error compatibles con Problem Details para casos especificos.
 - Tests automatizados con `pytest` y `mongomock`.
 - Imagen Docker propia para la API.
-- Docker Compose separado para base de datos, Ollama y aplicacion.
+- Docker Compose separado para base de datos y aplicacion.
 
 ## Arquitectura
 
@@ -114,15 +112,14 @@ Los archivos de infraestructura Docker se centralizaron en la carpeta `docker/` 
 |------------------|-----------------|
 | `Dockerfile` | `docker/Dockerfile` |
 | `docker-compose.db.yml` | `docker/docker-compose.db.yml` |
-| `docker-compose.ollama.yml` | `docker/docker-compose.ollama.yml` |
 | `docker-compose.yml` | `docker/docker-compose.yml` |
 
 `.dockerignore` permanece en la raiz y ahora ignora el directorio `docker/` completo.
 
-`docker-compose.yml` no hardcodea ningun host de backing service: `DATABASE_URL` y `OLLAMA_BASE_URL` se pasan tal cual vienen de `.env` (factor de configuracion 12-factor). El host que va en `.env` depende de donde corra la API:
+`docker-compose.yml` no hardcodea ningun host de backing service: `DATABASE_URL` se pasa tal cual viene de `.env` (factor de configuracion 12-factor). El host que va en `.env` depende de donde corra la API:
 
-- API dentro de Docker (`make up` / `docker compose -f docker/docker-compose.yml up`): usar el nombre de servicio de la red Docker, `mongo:27017` y `ollama:11434`.
-- API corriendo localmente fuera de Docker (`python main.py`) contra los contenedores de Mongo/Ollama expuestos: usar `localhost:27017` y `localhost:11434`.
+- API dentro de Docker (`make up` / `docker compose -f docker/docker-compose.yml up`): usar el nombre de servicio de la red Docker, `mongo:27017`.
+- API corriendo localmente fuera de Docker (`python main.py`) contra el contenedor de Mongo expuesto: usar `localhost:27017`.
 
 Cambiar de entorno es solo editar `.env`, sin tocar ningun archivo versionado.
 
@@ -150,7 +147,6 @@ Variables principales:
 APP_NAME=PDF Extract API
 APP_VERSION=0.1.0
 DEBUG=False
-APP_API_KEY=dev-api-key
 
 HOST=0.0.0.0
 PORT=8000
@@ -159,11 +155,6 @@ DATABASE_URL=mongodb://admin:9009@mongo:27017/?authSource=admin
 DATABASE_NAME=pdf_extract
 DATABASE_TIMEOUT_MS=3000
 MAX_PDF_SIZE_BYTES=10485760
-
-OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=llama3.2:1b
-OLLAMA_TIMEOUT_SECONDS=60
-OLLAMA_SUMMARY_MAX_CHARS=12000
 
 API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
@@ -184,7 +175,7 @@ Desde la raiz del proyecto, usa `make` para levantar todo el stack:
 make up
 ```
 
-Esto levanta automaticamente: MongoDB → Ollama → API
+Esto levanta automaticamente: MongoDB → API
 
 Otros comandos disponibles:
 
@@ -194,7 +185,6 @@ make logs   # Ver logs de la API
 make ps     # Ver estado de los contenedores
 make api    # Levantar solo la API
 make db     # Levantar solo MongoDB
-make ollama # Levantar solo Ollama
 ```
 
 ### Opcion manual (por servicio)
@@ -207,18 +197,6 @@ Levantar MongoDB:
 docker compose --env-file .env -f docker/docker-compose.db.yml up -d
 ```
 
-Levantar Ollama:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.ollama.yml up -d
-```
-
-Descargar el modelo local la primera vez:
-
-```bash
-docker exec -it pdf-extractext-ollama-1 ollama pull llama3.2:1b
-```
-
 Construir y levantar la API:
 
 ```bash
@@ -229,7 +207,6 @@ Verificar contenedores:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.db.yml ps
-docker compose --env-file .env -f docker/docker-compose.ollama.yml ps
 docker compose --env-file .env -f docker/docker-compose.yml ps
 ```
 
@@ -243,7 +220,6 @@ Apagar todo:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.yml down
-docker compose --env-file .env -f docker/docker-compose.ollama.yml down
 docker compose --env-file .env -f docker/docker-compose.db.yml down
 ```
 
@@ -261,13 +237,6 @@ Levantar MongoDB:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.db.yml up -d
-```
-
-Levantar Ollama:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.ollama.yml up -d
-docker exec -it pdf-extractext-ollama-1 ollama pull llama3.2:1b
 ```
 
 Correr la API:
@@ -307,7 +276,6 @@ Respuesta esperada del healthcheck:
 - `PUT /api/v1/documents/{document_id}`
 - `DELETE /api/v1/documents/{document_id}`
 - `POST /api/v1/documents/{document_id}/extract`
-- `POST /api/v1/documents/{document_id}/summary`
 - `GET /health`
 
 ## Flujo principal
@@ -347,39 +315,12 @@ Respuesta esperada:
 }
 ```
 
-## Ejemplo de resumen con Ollama
-
-El endpoint de resumen esta protegido con `X-API-Key`.
-
-```powershell
-curl -X POST "http://localhost:8000/api/v1/documents/1/summary" ^
-  -H "accept: application/json" ^
-  -H "X-API-Key: dev-api-key"
-```
-
-Respuesta esperada:
-
-```json
-{
-  "document_id": 1,
-  "model": "llama3.2:1b",
-  "summary": "Resumen generado a partir del texto extraido.",
-  "source_text_length": 2500
-}
-```
-
 ## Tests
 
 Ejecutar la suite:
 
 ```powershell
 python -m pytest -q
-```
-
-Resultado esperado actual:
-
-```text
-77 passed
 ```
 
 Los tests cubren:
@@ -390,7 +331,6 @@ Los tests cubren:
 - Actualizacion.
 - Eliminacion.
 - Extraccion de texto.
-- Resumen de texto protegido por API key.
 - Validaciones de nombre, PDF, tamanio, checksum y paginacion.
 - Errores controlados.
 
@@ -411,8 +351,6 @@ La extraccion actual usa `pypdf`, por lo que obtiene texto digital embebido en e
 
 Si el PDF es escaneado o contiene solo imagenes, `extracted_text` puede quedar vacio. Eso no significa que la API falle: significa que no se esta aplicando OCR.
 
-El resumen depende de que Ollama este levantado y de que el modelo configurado en `OLLAMA_MODEL` haya sido descargado previamente.
-
 ## Comandos utiles
 
 Comandos con `make` (desde la raiz del proyecto):
@@ -424,7 +362,6 @@ make logs        # Ver logs de la API
 make ps          # Ver estado de los contenedores
 make api         # Levantar solo la API
 make db          # Levantar solo MongoDB
-make ollama      # Levantar solo Ollama
 ```
 
 Comandos manuales (por servicio):
@@ -439,12 +376,6 @@ Ver logs de MongoDB:
 
 ```bash
 docker logs -f docker_mongo_1
-```
-
-Ver logs de Ollama:
-
-```bash
-docker logs -f docker_ollama_1
 ```
 
 Ver logs de la API:
@@ -463,12 +394,6 @@ Apagar solo MongoDB:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.db.yml down
-```
-
-Apagar solo Ollama:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.ollama.yml down
 ```
 
 Borrar tambien el volumen de MongoDB:
