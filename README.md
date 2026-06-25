@@ -135,9 +135,13 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
 
 - `IMAGE_TAG` debe coincidir con `APP_VERSION` (definida tambien en `pyproject.toml` y `app/config/settings.py`).
 - Se sigue [Semantic Versioning](https://semver.org/lang/es/) (`MAJOR.MINOR.PATCH`):
-  - **MAJOR**: cambios que rompen compatibilidad (ej. se modifica la forma de un endpoint existente).
-  - **MINOR**: funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo).
-  - **PATCH**: correccion de bugs sin agregar funcionalidad.
+
+  | Numero | Nombre | Cuando se incrementa |
+  |--------|--------|----------------------|
+  | **1**.0.0 | MAJOR | Cambios que rompen compatibilidad (ej. se modifica la forma de un endpoint existente). |
+  | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
+  | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
+
 - La version actual, `1.0.0`, corresponde a la primera release estable de la API.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`.
