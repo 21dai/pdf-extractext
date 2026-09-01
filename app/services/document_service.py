@@ -2,7 +2,7 @@
 
 from io import BytesIO
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from app.config import settings
 from app.core import validators as v
@@ -20,10 +20,13 @@ class DocumentService:
         "por lo que no puede reprocesar."
     )
 
-    def __init__(self, db: Any):
-        """Initialize service with database session."""
-        self.repository = DocumentRepository(db)
-        self.db = db
+    def __init__(self, repository: DocumentRepository):
+        """Initialize service with the document repository.
+
+        Args:
+            repository: Persistence adapter for documents
+        """
+        self.repository = repository
 
     def create_document(
         self, name: str, original_filename: str | None, file_content: bytes

@@ -1,6 +1,6 @@
 """Document API endpoints."""
 
-from typing import Any, List
+from typing import List
 
 from fastapi import (
     APIRouter,
@@ -12,6 +12,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pymongo.database import Database
 
 from app.core.validators import (
     MAX_PAGINATION_LIMIT,
@@ -20,6 +21,7 @@ from app.core.validators import (
     validate_original_filename,
     validate_pagination,
 )
+from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
 from app.services import DocumentService
 from app.utils.database import get_db
@@ -27,9 +29,9 @@ from app.utils.database import get_db
 router = APIRouter(prefix="/documents", tags=["documentos"])
 
 
-def get_document_service(db: Any = Depends(get_db)) -> DocumentService:
+def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
     """Dependency to obtain the document service."""
-    return DocumentService(db)
+    return DocumentService(DocumentRepository(db))
 
 
 @router.post(
