@@ -15,10 +15,10 @@ from app.core.validators import (
     calculate_checksum,
     validate_document_name,
     validate_original_filename,
+    validate_pagination,
     validate_pdf_extension,
     validate_pdf_signature,
     validate_pdf_size,
-    validate_pagination,
 )
 
 

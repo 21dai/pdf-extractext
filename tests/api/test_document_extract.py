@@ -1,6 +1,7 @@
 """Tests for document extraction endpoints."""
 
 from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 
 from tests.support.api_documents import create_document_body
@@ -61,7 +62,9 @@ def test_extract_document_without_cached_text_returns_problem_details(
             "name": "Memory Only Document",
             "original_filename": "memory-only.pdf",
             "file_path": "memory://documents/memory-only.pdf",
-            "checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "checksum": (
+                "0123456789abcdef0123456789abcdef" "0123456789abcdef0123456789abcdef"
+            ),
             "file_size": len(build_pdf_bytes("Placeholder text")),
             "extracted_text": None,
             "is_processed": False,
@@ -81,7 +84,8 @@ def test_extract_document_without_cached_text_returns_problem_details(
     assert problem_details["status"] == 409
     assert (
         problem_details["detail"]
-        == "La API procesa el PDF solo en el upload y no lo guarda en disco, por lo que no puede reprocesar."
+        == "La API procesa el PDF solo en el upload y no lo guarda en "
+        "disco, por lo que no puede reprocesar."
     )
     assert problem_details["instance"].endswith(
         f"/api/v1/documents/{document_id}/extract"

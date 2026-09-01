@@ -39,7 +39,8 @@ def validate_document_name(name: str | None) -> str:
 
     if len(normalized) > MAX_DOCUMENT_NAME_LENGTH:
         raise ValueError(
-            f"El nombre del documento no debe superar los {MAX_DOCUMENT_NAME_LENGTH} caracteres"
+            "El nombre del documento no debe superar los "
+            f"{MAX_DOCUMENT_NAME_LENGTH} caracteres"
         )
 
     return normalized
@@ -69,7 +70,8 @@ def validate_original_filename(original_filename: str | None) -> str:
 
     if len(normalized) > MAX_ORIGINAL_FILENAME_LENGTH:
         raise ValueError(
-            f"El nombre del archivo no debe superar los {MAX_ORIGINAL_FILENAME_LENGTH} caracteres"
+            "El nombre del archivo no debe superar los "
+            f"{MAX_ORIGINAL_FILENAME_LENGTH} caracteres"
         )
 
     return normalized

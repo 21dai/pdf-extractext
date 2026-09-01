@@ -12,21 +12,16 @@ from tests.support.pdf import (
     pdf_checksum,
 )
 
-
 DOCUMENTS_PATH = "/api/v1/documents"
 
 
-def create_document_response(
-    client: TestClient, **upload_kwargs: Any
-):
+def create_document_response(client: TestClient, **upload_kwargs: Any):
     """Create a document through the API and return the raw response."""
     data, files = create_upload_payload(**upload_kwargs)
     return client.post(DOCUMENTS_PATH, data=data, files=files)
 
 
-def create_document_body(
-    client: TestClient, **upload_kwargs: Any
-) -> Mapping[str, Any]:
+def create_document_body(client: TestClient, **upload_kwargs: Any) -> Mapping[str, Any]:
     """Create a document through the API and return the parsed response body."""
     response = create_document_response(client, **upload_kwargs)
     return response.json()

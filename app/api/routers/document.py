@@ -158,8 +158,7 @@ async def extract_text(
         error_message = str(exc)
         status_code = (
             status.HTTP_409_CONFLICT
-            if error_message
-            == service.EXTRACT_ONLY_ON_UPLOAD_MESSAGE
+            if error_message == service.EXTRACT_ONLY_ON_UPLOAD_MESSAGE
             else status.HTTP_400_BAD_REQUEST
         )
         raise HTTPException(status_code=status_code, detail=error_message)

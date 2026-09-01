@@ -1,0 +1,13 @@
+[flake8]
+# Alineado con black: mismo ancho de linea y se ignoran los dos codigos
+# que black provoca por diseno (E203 espacio antes de ':', W503 salto
+# de linea antes de operador binario).
+max-line-length = 88
+extend-ignore = E203, W503
+exclude =
+    .git,
+    .venv,
+    __pycache__,
+    build,
+    dist,
+    *.egg-info

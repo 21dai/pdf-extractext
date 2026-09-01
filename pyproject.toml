@@ -38,5 +38,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["app"]
 
+[tool.black]
+line-length = 88
+
+[tool.isort]
+# Perfil "black" para que isort y black no se contradigan al ordenar imports.
+profile = "black"
+line_length = 88
+
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"

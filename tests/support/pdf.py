@@ -2,15 +2,12 @@
 
 import hashlib
 
-
 DEFAULT_PDF_TEXT = "Test Document Content"
 
 
 def build_pdf_bytes(text: str = DEFAULT_PDF_TEXT) -> bytes:
     """Build a minimal valid single-page PDF containing the given text."""
-    escaped_text = (
-        text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-    )
+    escaped_text = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     stream = f"BT\n/F1 18 Tf\n50 100 Td\n({escaped_text}) Tj\nET\n"
     stream_bytes = stream.encode("utf-8")
 
