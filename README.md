@@ -358,6 +358,12 @@ Los tests cubren:
 - Validaciones de nombre, PDF, tamanio, checksum y paginacion.
 - Errores controlados.
 
+Los tests estan organizados por capa:
+
+- `tests/test_validators.py`: reglas de dominio puras, sin I/O.
+- `tests/service/`: la capa de negocio (`DocumentService`) probada por su propia interfaz, sin HTTP.
+- `tests/api/`: el flujo completo por HTTP con `TestClient` y `mongomock`.
+
 ## Documentacion util
 
 - `START_HERE.md`: punto de entrada rapido.
