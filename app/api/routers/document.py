@@ -16,10 +16,8 @@ from pymongo.database import Database
 
 from app.core.validators import (
     MAX_PAGINATION_LIMIT,
-    validate_document_id,
     validate_document_name,
     validate_original_filename,
-    validate_pagination,
 )
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate

@@ -71,32 +71,6 @@ class DocumentRepository:
         documents = self.collection.find().sort("id", 1).skip(skip).limit(limit)
         return [self._deserialize(document) for document in documents]
 
-    def get_by_name(self, name: str) -> Optional[Document]:
-        """
-        Get document by name.
-
-        Args:
-            name: Document name
-
-        Returns:
-            Document if found, None otherwise
-        """
-        document = self.collection.find_one({"name": name})
-        return self._deserialize(document)
-
-    def get_by_file_path(self, file_path: str) -> Optional[Document]:
-        """
-        Get document by file path.
-
-        Args:
-            file_path: Document file path
-
-        Returns:
-            Document if found, None otherwise
-        """
-        document = self.collection.find_one({"file_path": file_path})
-        return self._deserialize(document)
-
     def get_by_checksum(self, checksum: str) -> Optional[Document]:
         """
         Get document by checksum.

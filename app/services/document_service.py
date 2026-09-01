@@ -1,7 +1,6 @@
 """Document service - Business logic."""
 
 from io import BytesIO
-from pathlib import Path
 from typing import List, Optional
 
 from app.config import settings
@@ -14,7 +13,6 @@ from app.schemas import DocumentResponse, DocumentUpdate
 class DocumentService:
     """Service for document business logic."""
 
-    PDF_SIGNATURE = b"%PDF-"
     EXTRACT_ONLY_ON_UPLOAD_MESSAGE = (
         "La API procesa el PDF solo en el upload y no lo guarda en disco, "
         "por lo que no puede reprocesar."
@@ -165,17 +163,6 @@ class DocumentService:
         v.validate_pdf_extension(original_filename)
         v.validate_pdf_size(file_content, settings.max_pdf_size_bytes)
         v.validate_pdf_signature(file_content)
-
-    def _calculate_checksum(self, file_content: bytes) -> str:
-        """Calculate the SHA-256 checksum of uploaded bytes.
-
-        Args:
-            file_content: Uploaded PDF bytes
-
-        Returns:
-            SHA-256 checksum as a hex string
-        """
-        return v.calculate_checksum(file_content)
 
     def _build_memory_reference(self, checksum: str) -> str:
         """Build a logical reference for a document processed fully in memory.

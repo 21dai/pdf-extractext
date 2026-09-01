@@ -15,12 +15,6 @@ class DocumentBase(BaseModel):
     file_size: int = Field(..., description="Tamano del archivo en bytes")
 
 
-class DocumentCreate(DocumentBase):
-    """Schema for creating a document."""
-
-    pass
-
-
 class DocumentUpdate(BaseModel):
     """Schema for updating a document."""
 

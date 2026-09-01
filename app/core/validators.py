@@ -150,21 +150,6 @@ def calculate_checksum(file_content: bytes) -> str:
     return hashlib.sha256(file_content).hexdigest()
 
 
-def validate_unique_checksum(checksum: str, *, existing_document: object | None) -> None:
-    """Validate that a checksum does not already exist in the store.
-
-    Args:
-        checksum: The checksum to validate.
-        existing_document: Result of a repository lookup by checksum,
-            or None if no document exists.
-
-    Raises:
-        ValueError: If a document with the same checksum already exists.
-    """
-    if existing_document is not None:
-        raise ValueError("Ya existe un documento con el mismo checksum")
-
-
 # ---------------------------------------------------------------------------
 # Pagination
 # ---------------------------------------------------------------------------
@@ -191,59 +176,3 @@ def validate_pagination(skip: int, limit: int) -> tuple[int, int]:
         limit = MAX_PAGINATION_LIMIT
 
     return skip, limit
-
-
-# ---------------------------------------------------------------------------
-# Document ID
-# ---------------------------------------------------------------------------
-def validate_document_id(document_id: int) -> int:
-    """Validate that a document ID is a positive integer.
-
-    Args:
-        document_id: The ID to validate.
-
-    Returns:
-        The validated ID.
-
-    Raises:
-        ValueError: If the ID is not a positive integer.
-    """
-    if not isinstance(document_id, int) or document_id <= 0:
-        raise ValueError("El ID del documento debe ser un entero positivo")
-    return document_id
-
-
-# ---------------------------------------------------------------------------
-# Legacy file path validation (kept for extract_text path)
-# ---------------------------------------------------------------------------
-def validate_pdf_file_on_disk(file_path, expected_size: int, max_size_bytes: int) -> None:
-    """Validate that the given path points to a stored PDF file with a valid size.
-
-    Args:
-        file_path: Path to the file on disk.
-        expected_size: Expected size in bytes from the database record.
-        max_size_bytes: Maximum permitted size in bytes.
-
-    Raises:
-        ValueError: If the file does not exist, is not a PDF, or size is invalid.
-    """
-    if not file_path.is_file():
-        raise ValueError(f"Archivo no encontrado: {file_path}")
-
-    if file_path.suffix.lower() != ".pdf":
-        raise ValueError("Solo se permiten archivos PDF")
-
-    actual_size = file_path.stat().st_size
-    if actual_size != expected_size:
-        raise ValueError(
-            f"Tamanio de archivo incorrecto: esperado {expected_size} bytes, encontrado {actual_size}"
-        )
-
-    if actual_size > max_size_bytes:
-        raise ValueError(
-            f"El PDF supera el tamano maximo permitido de {max_size_bytes} bytes"
-        )
-
-    with file_path.open("rb") as pdf_file:
-        if pdf_file.read(len(PDF_SIGNATURE)) != PDF_SIGNATURE:
-            raise ValueError("Archivo PDF invalido")
