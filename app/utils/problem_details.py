@@ -1,6 +1,8 @@
 """RFC 9457 Problem Details helpers."""
 
+from collections.abc import Sequence
 from http import HTTPStatus
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -20,7 +22,7 @@ def _problem_details_payload(
     status_code: int,
     detail: str,
     instance: str,
-    errors: list[dict] | None = None,
+    errors: Sequence[Any] | None = None,
 ) -> dict:
     """Build a Problem Details payload."""
     payload: dict[str, object] = {

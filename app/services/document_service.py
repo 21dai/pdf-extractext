@@ -151,7 +151,7 @@ class DocumentService:
         return v.validate_original_filename(original_filename)
 
     def _validate_uploaded_pdf(
-        self, original_filename: str | None, file_content: bytes
+        self, original_filename: str, file_content: bytes
     ) -> None:
         """Validate uploaded PDF bytes before persistence.
 

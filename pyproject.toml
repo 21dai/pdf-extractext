@@ -46,5 +46,14 @@ line-length = 88
 profile = "black"
 line_length = 88
 
+[tool.mypy]
+python_version = "3.13"
+files = ["app"]
+# Se corrigen las anotaciones en vez de silenciar errores: sin type: ignore
+# ni cast() de conveniencia. Las librerias sin stubs no rompen el chequeo.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"

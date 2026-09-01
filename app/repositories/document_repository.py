@@ -55,7 +55,7 @@ class DocumentRepository:
             Document if found, None otherwise
         """
         document = self.collection.find_one({"id": document_id})
-        return self._deserialize(document)
+        return self._deserialize_optional(document)
 
     def get_all(self, skip: int = 0, limit: int = 10) -> List[Document]:
         """
@@ -82,7 +82,7 @@ class DocumentRepository:
             Document if found, None otherwise
         """
         document = self.collection.find_one({"checksum": checksum})
-        return self._deserialize(document)
+        return self._deserialize_optional(document)
 
     def update(self, document_id: int, data: dict[str, Any]) -> Optional[Document]:
         """
@@ -105,7 +105,7 @@ class DocumentRepository:
             {"$set": update_data},
             return_document=ReturnDocument.AFTER,
         )
-        return self._deserialize(document)
+        return self._deserialize_optional(document)
 
     def delete(self, document_id: int) -> bool:
         """
@@ -128,17 +128,26 @@ class DocumentRepository:
             upsert=True,
             return_document=ReturnDocument.AFTER,
         )
+        if counter is None:
+            raise RuntimeError("No se pudo generar el ID del documento")
+
         return int(counter["value"])
 
     def _serialize(self, document: Document) -> dict[str, Any]:
         """Convert a domain model into a MongoDB document."""
         return document.model_dump(mode="python")
 
-    def _deserialize(self, document: Mapping[str, Any] | None) -> Optional[Document]:
+    def _deserialize(self, document: Mapping[str, Any]) -> Document:
         """Convert a MongoDB document into a domain model."""
-        if not document:
-            return None
-
         payload = dict(document)
         payload.pop("_id", None)
         return Document.model_validate(payload)
+
+    def _deserialize_optional(
+        self, document: Mapping[str, Any] | None
+    ) -> Optional[Document]:
+        """Convert a MongoDB lookup result into a domain model, if it exists."""
+        if not document:
+            return None
+
+        return self._deserialize(document)
