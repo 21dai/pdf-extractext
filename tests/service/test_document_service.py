@@ -8,10 +8,10 @@ writing raw documents into the database.
 import pytest
 
 from app.config import settings
-from app.models import Document
 from app.repositories import DocumentRepository
 from app.schemas import DocumentUpdate
 from app.services import DocumentService
+from tests.support.documents import build_unprocessed_document
 from tests.support.pdf import (
     DEFAULT_PDF_TEXT,
     MINIMAL_PDF_BYTES,
@@ -30,21 +30,6 @@ def repository(db) -> DocumentRepository:
 def service(repository: DocumentRepository) -> DocumentService:
     """Provide a document service wired to the test repository."""
     return DocumentService(repository)
-
-
-def store_unprocessed_document(repository: DocumentRepository) -> Document:
-    """Persist a document that has no extracted text, via the repository API."""
-    return repository.create(
-        Document(
-            name="Memory Only Document",
-            original_filename="memory-only.pdf",
-            file_path="memory://documents/memory-only.pdf",
-            checksum="0" * 64,
-            file_size=len(MINIMAL_PDF_BYTES),
-            extracted_text=None,
-            is_processed=False,
-        )
-    )
 
 
 # create_document
@@ -204,7 +189,7 @@ def test_extract_text_rejects_document_without_cached_text(
     service: DocumentService, repository: DocumentRepository
 ):
     """Test a document stored without extracted text cannot be reprocessed."""
-    stored = store_unprocessed_document(repository)
+    stored = repository.create(build_unprocessed_document())
 
     with pytest.raises(ValueError) as error:
         service.extract_text(stored.id)

@@ -1,10 +1,10 @@
 """Tests for document extraction endpoints."""
 
-from datetime import UTC, datetime
-
 from fastapi.testclient import TestClient
 
+from app.repositories import DocumentRepository
 from tests.support.api_documents import create_document_body
+from tests.support.documents import build_unprocessed_document
 from tests.support.pdf import build_pdf_bytes
 
 
@@ -55,23 +55,8 @@ def test_extract_document_without_cached_text_returns_problem_details(
     client: TestClient, db
 ):
     """Test that a memory-only document without cached text cannot be reprocessed."""
-    document_id = 901
-    db["documents"].insert_one(
-        {
-            "id": document_id,
-            "name": "Memory Only Document",
-            "original_filename": "memory-only.pdf",
-            "file_path": "memory://documents/memory-only.pdf",
-            "checksum": (
-                "0123456789abcdef0123456789abcdef" "0123456789abcdef0123456789abcdef"
-            ),
-            "file_size": len(build_pdf_bytes("Placeholder text")),
-            "extracted_text": None,
-            "is_processed": False,
-            "created_at": datetime.now(UTC),
-            "updated_at": datetime.now(UTC),
-        }
-    )
+    stored_document = DocumentRepository(db).create(build_unprocessed_document())
+    document_id = stored_document.id
 
     response = client.post(f"/api/v1/documents/{document_id}/extract")
 
