@@ -364,6 +364,36 @@ Los tests estan organizados por capa:
 - `tests/service/`: la capa de negocio (`DocumentService`) probada por su propia interfaz, sin HTTP.
 - `tests/api/`: el flujo completo por HTTP con `TestClient` y `mongomock`.
 
+## Calidad de codigo
+
+Las cuatro herramientas estan configuradas en el repo (`pyproject.toml` y
+`.flake8`), asi que se corren **sin pasar ningun flag**. Las cuatro deben
+quedar en cero antes de abrir un PR:
+
+```powershell
+black .          # formatea (88 caracteres)
+isort .          # ordena imports (perfil black)
+flake8           # estilo y errores comunes
+mypy             # chequeo de tipos sobre app/
+```
+
+Para chequear sin modificar archivos:
+
+```powershell
+black --check .
+isort --check-only .
+```
+
+Convenciones vigentes:
+
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/es/) con el
+  numero de issue como alcance, y `Closes #N` para cerrarlo al hacer push.
+  Ejemplo: `fix(#30): corregir los errores de tipos de mypy. Closes #30`.
+- **Tests**: nombres que se leen como especificacion (`test_<que_hace_el_sistema>`),
+  organizados por capa (ver seccion Tests).
+- **Estado a preparar en un test**: siempre por una interfaz publica, nunca
+  escribiendo documentos crudos en MongoDB.
+
 ## Documentacion util
 
 - `START_HERE.md`: punto de entrada rapido.
