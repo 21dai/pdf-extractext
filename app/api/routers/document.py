@@ -14,11 +14,8 @@ from fastapi import (
 )
 from pymongo.database import Database
 
-from app.core.validators import (
-    MAX_PAGINATION_LIMIT,
-    validate_document_name,
-    validate_original_filename,
-)
+from app.core.exceptions import DocumentNotFoundError
+from app.core.validators import MAX_PAGINATION_LIMIT
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
 from app.services import DocumentService
@@ -45,20 +42,12 @@ async def create_document(
 ) -> DocumentResponse:
     """Create a new document from an uploaded PDF.
 
-    Validates the document name and the uploaded file on the router layer,
-    then delegates business logic to the service.
+    Delegates validation and business logic to the service, translating
+    domain validation errors to HTTP 400.
     """
-    # Layer 1: Router-level validation (fail fast)
-    try:
-        validated_name = validate_document_name(name)
-        if file.filename:
-            validate_original_filename(file.filename)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-
     try:
         file_content = await file.read()
-        return service.create_document(validated_name, file.filename, file_content)
+        return service.create_document(name, file.filename, file_content)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     finally:
@@ -90,10 +79,7 @@ async def get_document(
     """Get a document by ID."""
     document = service.get_document(document_id)
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Documento {document_id} no encontrado",
-        )
+        raise DocumentNotFoundError(document_id)
     return document
 
 
@@ -111,10 +97,7 @@ async def update_document(
     try:
         document = service.update_document(document_id, document_data)
         if not document:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Documento {document_id} no encontrado",
-            )
+            raise DocumentNotFoundError(document_id)
         return document
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -131,10 +114,7 @@ async def delete_document(
     """Delete a document."""
     success = service.delete_document(document_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Documento {document_id} no encontrado",
-        )
+        raise DocumentNotFoundError(document_id)
 
 
 @router.post(
@@ -145,20 +125,12 @@ async def delete_document(
 async def extract_text(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
-    """Get or complete the extracted text of a document."""
-    try:
-        document = service.extract_text(document_id)
-        if not document:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Documento {document_id} no encontrado",
-            )
-        return document
-    except ValueError as exc:
-        error_message = str(exc)
-        status_code = (
-            status.HTTP_409_CONFLICT
-            if error_message == service.EXTRACT_ONLY_ON_UPLOAD_MESSAGE
-            else status.HTTP_400_BAD_REQUEST
-        )
-        raise HTTPException(status_code=status_code, detail=error_message)
+    """Get or complete the extracted text of a document.
+
+    CannotReprocessError is translated to HTTP 409 by the registered
+    problem details handler.
+    """
+    document = service.extract_text(document_id)
+    if not document:
+        raise DocumentNotFoundError(document_id)
+    return document

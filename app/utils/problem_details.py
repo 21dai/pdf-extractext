@@ -4,9 +4,27 @@ from collections.abc import Sequence
 from http import HTTPStatus
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+from app.core.exceptions import CannotReprocessError, DocumentNotFoundError
+
+
+async def _domain_exception_response(
+    request: Request, exc: Exception, status_code: int
+) -> JSONResponse:
+    """Build a Problem Details response for a domain exception."""
+    payload = _problem_details_payload(
+        status_code=status_code,
+        detail=str(exc),
+        instance=str(request.url),
+    )
+    return JSONResponse(
+        status_code=status_code,
+        content=payload,
+        media_type="application/problem+json",
+    )
 
 
 def _status_title(status_code: int) -> str:
@@ -68,4 +86,18 @@ def register_problem_details_handlers(app: FastAPI) -> None:
             status_code=422,
             content=payload,
             media_type="application/problem+json",
+        )
+
+    @app.exception_handler(DocumentNotFoundError)
+    async def document_not_found_handler(
+        request: Request, exc: DocumentNotFoundError
+    ):
+        return await _domain_exception_response(
+            request, exc, status.HTTP_404_NOT_FOUND
+        )
+
+    @app.exception_handler(CannotReprocessError)
+    async def cannot_reprocess_handler(request: Request, exc: CannotReprocessError):
+        return await _domain_exception_response(
+            request, exc, status.HTTP_409_CONFLICT
         )

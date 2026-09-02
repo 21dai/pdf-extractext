@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from app.config import settings
 from app.core import validators as v
+from app.core.exceptions import CANNOT_REPROCESS_MESSAGE, CannotReprocessError
 from app.models import Document
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
@@ -13,10 +14,7 @@ from app.schemas import DocumentResponse, DocumentUpdate
 class DocumentService:
     """Service for document business logic."""
 
-    EXTRACT_ONLY_ON_UPLOAD_MESSAGE = (
-        "La API procesa el PDF solo en el upload y no lo guarda en disco, "
-        "por lo que no puede reprocesar."
-    )
+    EXTRACT_ONLY_ON_UPLOAD_MESSAGE = CANNOT_REPROCESS_MESSAGE
 
     def __init__(self, repository: DocumentRepository):
         """Initialize service with the document repository.
@@ -137,7 +135,7 @@ class DocumentService:
         if document.is_processed and document.extracted_text is not None:
             return DocumentResponse.model_validate(document)
 
-        raise ValueError(self.EXTRACT_ONLY_ON_UPLOAD_MESSAGE)
+        raise CannotReprocessError()
 
     def _normalize_original_filename(self, original_filename: str | None) -> str:
         """Normalize the uploaded filename for safe persistence.
