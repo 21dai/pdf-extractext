@@ -9,7 +9,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application configuration settings"""
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    # El .env se comparte con docker-compose, que necesita variables que no son
+    # de la aplicacion (por ejemplo IMAGE_TAG, el tag de la imagen). Se ignoran
+    # en vez de hacer fallar el arranque.
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
     # Application
     app_name: str = "API de Extraccion de PDF"
