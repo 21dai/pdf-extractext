@@ -29,7 +29,7 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 
 ## Arquitectura
 
-El proyecto sigue una arquitectura de 3 capas:
+El proyecto sigue una arquitectura de 3 capas con influencia parcial de Hexagonal (ver `ARCHITECTURE.md` para la clasificacion detallada y las decisiones de diseno):
 
 ```text
 Router -> Service -> Repository -> MongoDB

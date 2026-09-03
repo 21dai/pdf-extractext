@@ -2,11 +2,18 @@
 
 ## Vision general
 
-El proyecto sigue una arquitectura de 3 capas:
+El proyecto sigue una arquitectura de 3 capas con influencia parcial de Hexagonal:
 
 ```text
 Router -> Service -> Repository -> MongoDB
 ```
+
+> Clasificacion honesta: **no es Clean Architecture ni Onion Architecture**.
+> Es una arquitectura en 3 capas clasica, con una influencia parcial del estilo
+> Hexagonal (Ports & Adapters) reflejada en la existencia de `DocumentRepository`
+> como unico punto de acceso a la persistencia. Sin embargo, no existe una
+> separacion estricta entre dominio e infraestructura (ver la seccion
+> "Decision de arquitectura: acoplamiento Modelo/Persistencia").
 
 ## 1. Capa de presentacion
 
@@ -56,6 +63,36 @@ Responsabilidades:
 Archivo principal:
 
 - `app/repositories/document_repository.py`
+
+## Decision de arquitectura: acoplamiento Modelo/Persistencia
+
+### Estado actual
+
+La clase `Document` (`app/models/document.py`) actua simultaneamente como:
+
+- **entidad de dominio**: representa el concepto de negocio "documento PDF procesado" (nombre, checksum, texto extraido, tamano, etc.);
+- **documento de base de datos**: su estructura es la que se persiste directamente en MongoDB a traves del repository.
+
+Es decir, no existe una separacion entre un "modelo de dominio puro" y un "modelo de persistencia" propios de Clean Architecture o Onion Architecture.
+
+### Esto es una decision consciente, no un descuido tecnico
+
+Este acoplamiento es un **limite aceptado de forma deliberada** para el alcance actual del proyecto. Las razones son:
+
+- **Simplicidad (KISS)**: para un CRUD con un solo agregado (`Document`), mantener dos modelos y un mapper entre ellos agregaria complejidad sin beneficio real.
+- **Alcance acotado**: el dominio no tiene logica rica ni invariantes complejas que exijan aislar el modelo de la forma de persistencia.
+- **Costo/beneficio**: el costo de desacoplar hoy supera el riesgo de migracion futura, dado que el seam ya esta previsto (ver abajo).
+
+### Seam (punto de desacoplamiento futuro)
+
+Aunque el modelo esta acoplado a la persistencia, **la frontera de desacoplamiento ya existe**: es `DocumentRepository` (`app/repositories/document_repository.py`).
+
+Si en el futuro se necesita separar dominio de persistencia, el cambio es localizado:
+
+1. Crear un modelo de dominio puro y un modelo de persistencia (o schema) independientes.
+2. Modificar unicamente los metodos `_serialize` / `_deserialize` del repository para que actuen como mappers entre ambos modelos.
+
+El resto de la aplicacion (routers, services) no deberia requerir cambios, porque ya consume al repository como unica via de acceso a datos. Este es el punto donde la influencia Hexagonal del diseno paga su deuda tecnica.
 
 ## Persistencia
 
