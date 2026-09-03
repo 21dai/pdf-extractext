@@ -403,7 +403,6 @@ Convenciones vigentes:
 - `ARCHITECTURE.md`: resumen de arquitectura actual.
 - `EJEMPLOS.md`: ejemplos de requests y respuestas.
 - `VISUAL_GUIDE.md`: vista visual del flujo principal.
-- `TESTING_MANUAL.md`: guia de pruebas manuales.
 
 ## Limitacion conocida
 
