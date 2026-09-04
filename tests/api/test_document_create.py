@@ -2,7 +2,6 @@
 
 from fastapi.testclient import TestClient
 
-from app.config import settings
 from tests.support.api_documents import (
     assert_created_document,
     create_document_response,
@@ -61,17 +60,29 @@ def test_create_document_rejects_blank_document_name(client: TestClient):
     assert error_body["detail"] == "El nombre del documento es obligatorio"
 
 
-def test_create_document_rejects_pdf_larger_than_configured_limit(
-    client: TestClient, monkeypatch
-):
+def test_create_document_rejects_pdf_larger_than_configured_limit(db):
     """Test creating a document rejects PDFs above the configured size limit."""
-    monkeypatch.setattr(settings, "max_pdf_size_bytes", len(MINIMAL_PDF_BYTES) - 1)
-    response = create_document_response(client, name="Too Large")
+    from app.api.routers.document import get_document_service
+    from app.main import create_app
+    from app.repositories import DocumentRepository
+    from app.services import DocumentService
 
-    assert response.status_code == 400
+    # Set a custom limit that is smaller than the MINIMAL_PDF_BYTES
+    custom_limit = len(MINIMAL_PDF_BYTES) - 1
+    repository = DocumentRepository(db)
+    app = create_app()
 
-    error_body = response.json()
-    assert "El PDF supera el tamano maximo permitido" in error_body["detail"]
+    def _override_service():
+        return DocumentService(repository, max_pdf_size_bytes=custom_limit)
+
+    app.dependency_overrides[get_document_service] = _override_service
+    with TestClient(app) as client:
+        response = create_document_response(client, name="Too Large")
+
+        assert response.status_code == 400
+
+        error_body = response.json()
+        assert "El PDF supera el tamano maximo permitido" in error_body["detail"]
 
 
 def test_create_document_rejects_duplicate_document_checksum(client: TestClient):

@@ -7,7 +7,6 @@ writing raw documents into the database.
 
 import pytest
 
-from app.config import settings
 from app.repositories import DocumentRepository
 from app.schemas import DocumentUpdate
 from app.services import DocumentService
@@ -29,7 +28,9 @@ def repository(db) -> DocumentRepository:
 @pytest.fixture
 def service(repository: DocumentRepository) -> DocumentService:
     """Provide a document service wired to the test repository."""
-    return DocumentService(repository)
+    from app.config import settings
+
+    return DocumentService(repository, max_pdf_size_bytes=settings.max_pdf_size_bytes)
 
 
 # create_document
@@ -108,13 +109,19 @@ def test_create_document_rejects_content_without_pdf_signature(
 
 
 def test_create_document_rejects_pdf_larger_than_configured_limit(
-    service: DocumentService, monkeypatch
+    repository: DocumentRepository,
 ):
     """Test creating a document rejects PDFs above the configured size limit."""
-    monkeypatch.setattr(settings, "max_pdf_size_bytes", len(MINIMAL_PDF_BYTES) - 1)
+    # Set a custom limit that is smaller than the MINIMAL_PDF_BYTES
+    custom_limit = len(MINIMAL_PDF_BYTES) - 1
+    from app.services import DocumentService
+
+    service_with_limit = DocumentService(repository, max_pdf_size_bytes=custom_limit)
 
     with pytest.raises(ValueError) as error:
-        service.create_document("Muy grande", "grande.pdf", MINIMAL_PDF_BYTES)
+        service_with_limit.create_document(
+            "Muy grande", "grande.pdf", MINIMAL_PDF_BYTES
+        )
 
     assert "El PDF supera el tamano maximo permitido" in str(error.value)
 

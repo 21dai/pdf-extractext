@@ -14,6 +14,7 @@ from fastapi import (
 )
 from pymongo.database import Database
 
+from app.config import settings
 from app.core.exceptions import DocumentNotFoundError
 from app.core.validators import MAX_PAGINATION_LIMIT
 from app.repositories import DocumentRepository
@@ -26,7 +27,8 @@ router = APIRouter(prefix="/documents", tags=["documentos"])
 
 def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
     """Dependency to obtain the document service."""
-    return DocumentService(DocumentRepository(db))
+    repository = DocumentRepository(db)
+    return DocumentService(repository, max_pdf_size_bytes=settings.max_pdf_size_bytes)
 
 
 @router.post(

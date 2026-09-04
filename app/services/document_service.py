@@ -3,7 +3,6 @@
 from io import BytesIO
 from typing import List, Optional
 
-from app.config import settings
 from app.core import validators as v
 from app.core.exceptions import CANNOT_REPROCESS_MESSAGE, CannotReprocessError
 from app.models import Document
@@ -16,13 +15,15 @@ class DocumentService:
 
     EXTRACT_ONLY_ON_UPLOAD_MESSAGE = CANNOT_REPROCESS_MESSAGE
 
-    def __init__(self, repository: DocumentRepository):
+    def __init__(self, repository: DocumentRepository, max_pdf_size_bytes: int):
         """Initialize service with the document repository.
 
         Args:
             repository: Persistence adapter for documents
+            max_pdf_size_bytes: Maximum allowed PDF size in bytes.
         """
         self.repository = repository
+        self.max_pdf_size_bytes = max_pdf_size_bytes
 
     def create_document(
         self, name: str, original_filename: str | None, file_content: bytes
@@ -159,7 +160,7 @@ class DocumentService:
         """
         # Delegate to pure validators in app.core.validators
         v.validate_pdf_extension(original_filename)
-        v.validate_pdf_size(file_content, settings.max_pdf_size_bytes)
+        v.validate_pdf_size(file_content, self.max_pdf_size_bytes)
         v.validate_pdf_signature(file_content)
 
     def _build_memory_reference(self, checksum: str) -> str:
