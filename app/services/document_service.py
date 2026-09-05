@@ -1,10 +1,10 @@
 """Document service - Business logic."""
 
-from io import BytesIO
 from typing import List, Optional
 
 from app.core import validators as v
 from app.core.exceptions import CANNOT_REPROCESS_MESSAGE, CannotReprocessError
+from app.core.pdf_extraction import extract_pdf_text
 from app.models import Document
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
@@ -46,7 +46,7 @@ class DocumentService:
         if self.repository.get_by_checksum(checksum):
             raise ValueError("Ya existe un documento con el mismo checksum")
 
-        extracted_text = self._extract_pdf_text_from_bytes(file_content)
+        extracted_text = extract_pdf_text(file_content)
         document = Document(
             name=normalized_name,
             original_filename=normalized_filename,
@@ -173,41 +173,3 @@ class DocumentService:
             Stable reference string stored for backward compatibility
         """
         return f"memory://documents/{checksum}.pdf"
-
-    def _extract_pdf_text_from_bytes(self, file_content: bytes) -> str:
-        """Extract text from uploaded PDF bytes using pypdf.
-
-        Args:
-            file_content: Uploaded PDF bytes
-
-        Returns:
-            Extracted text with normalized page separation
-        """
-        return self._extract_pdf_text(BytesIO(file_content))
-
-    def _extract_pdf_text(self, pdf_source: BytesIO | str) -> str:
-        """Extract text from a PDF source using pypdf.
-
-        Args:
-            pdf_source: File-like object in memory or a file path
-
-        Returns:
-            Extracted text with normalized page separation
-        """
-        try:
-            from pypdf import PdfReader
-        except ImportError as exc:
-            raise ValueError(
-                "La dependencia de extraccion de PDF no esta instalada"
-            ) from exc
-
-        try:
-            reader = PdfReader(pdf_source)
-            page_texts = []
-            for page in reader.pages:
-                text = (page.extract_text() or "").strip()
-                if text:
-                    page_texts.append(text)
-            return "\n\n".join(page_texts)
-        except Exception as exc:
-            raise ValueError(f"Error al extraer el texto: {str(exc)}") from exc
