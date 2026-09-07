@@ -89,15 +89,9 @@ def register_problem_details_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(DocumentNotFoundError)
-    async def document_not_found_handler(
-        request: Request, exc: DocumentNotFoundError
-    ):
-        return await _domain_exception_response(
-            request, exc, status.HTTP_404_NOT_FOUND
-        )
+    async def document_not_found_handler(request: Request, exc: DocumentNotFoundError):
+        return await _domain_exception_response(request, exc, status.HTTP_404_NOT_FOUND)
 
     @app.exception_handler(CannotReprocessError)
     async def cannot_reprocess_handler(request: Request, exc: CannotReprocessError):
-        return await _domain_exception_response(
-            request, exc, status.HTTP_409_CONFLICT
-        )
+        return await _domain_exception_response(request, exc, status.HTTP_409_CONFLICT)
