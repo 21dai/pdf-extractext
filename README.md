@@ -237,8 +237,10 @@ docker compose --env-file .env -f docker/docker-compose.yml ps
 Ver logs de la API:
 
 ```bash
-docker logs -f docker_api_1
+docker compose --env-file .env -f docker/docker-compose.yml logs -f api
 ```
+
+> Nota: el nombre del contenedor puede variar (`docker-api-1`, `docker_api_1`, etc.) según la versión/configuración de Docker Compose.
 
 Apagar todo:
 
