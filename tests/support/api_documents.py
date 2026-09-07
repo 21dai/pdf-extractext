@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from tests.support.pdf import (
     DEFAULT_PDF_TEXT,
     MINIMAL_PDF_BYTES,
+    SHA256_MINIMAL_PDF,
     create_upload_payload,
-    pdf_checksum,
 )
 
 DOCUMENTS_PATH = "/api/v1/documents"
@@ -38,7 +38,7 @@ def assert_created_document(
     """Assert the standard response fields for a successfully created document."""
     assert document["name"] == expected_name
     assert document["original_filename"] == expected_filename
-    assert document["checksum"] == pdf_checksum(expected_content)
+    assert document["checksum"] == SHA256_MINIMAL_PDF
     assert document["file_size"] == len(expected_content)
     assert document["is_processed"] is True
     assert document["extracted_text"] == expected_text
