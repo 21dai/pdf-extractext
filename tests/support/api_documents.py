@@ -33,12 +33,18 @@ def assert_created_document(
     expected_name: str = "Test Document",
     expected_filename: str = "test.pdf",
     expected_content: bytes = MINIMAL_PDF_BYTES,
+    expected_checksum: str = SHA256_MINIMAL_PDF,
     expected_text: str = DEFAULT_PDF_TEXT,
 ) -> None:
-    """Assert the standard response fields for a successfully created document."""
+    """Assert the standard response fields for a successfully created document.
+
+    El checksum esperado es un literal conocido, no se recalcula sobre el
+    contenido. Por eso, si se pasa un `expected_content` distinto al PDF
+    minimo, hay que pasar tambien su `expected_checksum`.
+    """
     assert document["name"] == expected_name
     assert document["original_filename"] == expected_filename
-    assert document["checksum"] == SHA256_MINIMAL_PDF
+    assert document["checksum"] == expected_checksum
     assert document["file_size"] == len(expected_content)
     assert document["is_processed"] is True
     assert document["extracted_text"] == expected_text
