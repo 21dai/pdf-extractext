@@ -153,7 +153,9 @@ Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproj
 - `uv`
 - Docker Desktop
 - Docker Compose (V1 o V2)
-- `make` (instalar con `sudo apt install make` en WSL/Linux)
+- `make` **opcional**: solo para los atajos del `Makefile`. No viene en Windows;
+  en WSL/Linux se instala con `sudo apt install make`. Sin `make` se usan los
+  comandos de `docker compose`, que funcionan en cualquier sistema.
 
 > **Nota sobre Docker Compose**: Si usas Docker Compose V1 (commando `docker-compose` con guion), usa la sintaxis manual con `--env-file .env`. Si usas V2 (commando `docker compose` sin guion), podés agregar el flag `--env-file` en cada comando o usar el `Makefile`.
 
@@ -192,9 +194,9 @@ ROOT_PASSWORD=9009
 
 ## Ejecucion con Docker
 
-### Opcion rapida (recomendada)
+### Atajo con `make` (opcional)
 
-Desde la raiz del proyecto, usa `make` para levantar todo el stack:
+Si tenes `make` instalado, desde la raiz del proyecto:
 
 ```bash
 make up
@@ -212,9 +214,9 @@ make api    # Levantar solo la API
 make db     # Levantar solo MongoDB
 ```
 
-### Opcion manual (por servicio)
+### Con docker compose (recomendado, funciona en cualquier sistema)
 
-Si preferis levantar los servicios uno por uno o necesitas mas control, ejecuta los comandos manualmente con `--env-file .env`:
+No necesita `make`. Desde la raiz del proyecto:
 
 Levantar MongoDB:
 
@@ -318,13 +320,22 @@ Respuesta esperada del healthcheck:
 
 ## Ejemplo con curl
 
+En PowerShell hay que escribir `curl.exe`: `curl` a secas es un alias de
+`Invoke-WebRequest`, que no acepta estos parametros y ademas pide confirmacion.
+El caracter de continuacion de linea en PowerShell es la comilla invertida.
+
 ```powershell
-curl -X POST "http://localhost:8000/api/v1/documents" ^
-  -H "accept: application/json" ^
-  -H "Content-Type: multipart/form-data" ^
-  -F "name=Contrato de prueba" ^
+curl.exe -X POST "http://localhost:8000/api/v1/documents" `
+  -H "accept: application/json" `
+  -F "name=Contrato de prueba" `
   -F "file=@C:/ruta/al/archivo.pdf;type=application/pdf"
 ```
+
+> No hace falta pasar `Content-Type`: `curl` lo arma solo, con el `boundary`
+> que necesita el `multipart/form-data`.
+
+Tambien se puede probar sin la terminal, desde Swagger UI en
+<http://localhost:8000/docs>, con el boton **Try it out**.
 
 Respuesta esperada:
 
@@ -415,7 +426,7 @@ Si el PDF es escaneado o contiene solo imagenes, `extracted_text` puede quedar v
 
 ## Comandos utiles
 
-Comandos con `make` (desde la raiz del proyecto):
+Comandos con `make`, si lo tenes instalado (desde la raiz del proyecto):
 
 ```bash
 make up          # Levantar todo el stack
