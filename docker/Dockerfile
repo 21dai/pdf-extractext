@@ -6,13 +6,17 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 WORKDIR /app
 
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml uv.lock README.md ./
-COPY app ./app
-COPY main.py ./
+COPY --chown=appuser:appgroup pyproject.toml uv.lock README.md ./
+COPY --chown=appuser:appgroup app ./app
+COPY --chown=appuser:appgroup main.py ./
 
 RUN uv sync --frozen --no-dev
+
+USER appuser
 
 EXPOSE 8000
 
