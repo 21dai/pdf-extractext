@@ -142,7 +142,8 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual, `1.0.0`, corresponde a la primera release estable de la API.
+- La version actual es `1.0.1`. La `1.0.0` fue la primera release estable; la
+  `1.0.1` suma el hardening del contenedor (issue #18), sin cambios de comportamiento.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`.
 
@@ -168,8 +169,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.0.0
-IMAGE_TAG=1.0.0
+APP_VERSION=1.0.1
+IMAGE_TAG=1.0.1
 DEBUG=False
 
 HOST=0.0.0.0
