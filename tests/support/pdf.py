@@ -1,7 +1,5 @@
 """Shared PDF fixtures and helpers for API tests."""
 
-import hashlib
-
 DEFAULT_PDF_TEXT = "Test Document Content"
 
 
@@ -52,11 +50,6 @@ def build_pdf_bytes(text: str = DEFAULT_PDF_TEXT) -> bytes:
 
 MINIMAL_PDF_BYTES = build_pdf_bytes()
 SHA256_MINIMAL_PDF = "21963b097010d276edb6a984f1dd54cb5c7c762222c4aeed1c6a436b75f4eb4f"
-
-
-def pdf_checksum(content: bytes = MINIMAL_PDF_BYTES) -> str:
-    """Return the expected SHA-256 checksum for the given PDF bytes."""
-    return hashlib.sha256(content).hexdigest()
 
 
 def create_upload_payload(

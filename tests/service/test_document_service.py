@@ -14,8 +14,8 @@ from tests.support.documents import build_unprocessed_document
 from tests.support.pdf import (
     DEFAULT_PDF_TEXT,
     MINIMAL_PDF_BYTES,
+    SHA256_MINIMAL_PDF,
     build_pdf_bytes,
-    pdf_checksum,
 )
 
 
@@ -45,7 +45,7 @@ def test_create_document_persists_extracted_text_and_checksum(
     assert document.id is not None
     assert document.name == "Contrato"
     assert document.original_filename == "contrato.pdf"
-    assert document.checksum == pdf_checksum(MINIMAL_PDF_BYTES)
+    assert document.checksum == SHA256_MINIMAL_PDF
     assert document.file_size == len(MINIMAL_PDF_BYTES)
     assert document.extracted_text == DEFAULT_PDF_TEXT
     assert document.is_processed is True
