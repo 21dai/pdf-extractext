@@ -69,7 +69,7 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/health", tags=["inicio"], summary="Verificar estado de la API")
-    async def health(db: Any = Depends(get_db)):
+    def health(db: Any = Depends(get_db)):
         """Verificar que la API y MongoDB esten disponibles."""
         try:
             db.command("ping")

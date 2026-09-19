@@ -24,6 +24,10 @@ from app.utils.database import get_db
 
 router = APIRouter(prefix="/documents", tags=["documentos"])
 
+# Los endpoints son sincronicos a proposito: el service usa PyMongo y pypdf,
+# que bloquean. Declarados con `def`, FastAPI los ejecuta en un pool de hilos
+# y el event loop sigue atendiendo otras peticiones mientras se extrae un PDF.
+
 
 def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
     """Dependency to obtain the document service."""
@@ -37,7 +41,7 @@ def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
     status_code=status.HTTP_201_CREATED,
     summary="Crear y procesar un nuevo documento",
 )
-async def create_document(
+def create_document(
     name: str = Form(..., description="Nombre del documento"),
     file: UploadFile = File(..., description="Archivo PDF a registrar"),
     service: DocumentService = Depends(get_document_service),
@@ -48,18 +52,18 @@ async def create_document(
     domain validation errors to HTTP 400.
     """
     try:
-        file_content = await file.read()
+        file_content = file.file.read()
         return service.create_document(name, file.filename, file_content)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     finally:
-        await file.close()
+        file.file.close()
 
 
 @router.get(
     "", response_model=List[DocumentResponse], summary="Listar todos los documentos"
 )
-async def list_documents(
+def list_documents(
     skip: int = Query(0, ge=0, description="Cantidad de registros a omitir"),
     limit: int = Query(
         10, ge=1, le=MAX_PAGINATION_LIMIT, description="Cantidad maxima de registros"
@@ -75,7 +79,7 @@ async def list_documents(
     response_model=DocumentResponse,
     summary="Obtener un documento por ID",
 )
-async def get_document(
+def get_document(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
     """Get a document by ID."""
@@ -90,7 +94,7 @@ async def get_document(
     response_model=DocumentResponse,
     summary="Actualizar un documento",
 )
-async def update_document(
+def update_document(
     document_id: int,
     document_data: DocumentUpdate,
     service: DocumentService = Depends(get_document_service),
@@ -110,7 +114,7 @@ async def update_document(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Eliminar un documento",
 )
-async def delete_document(
+def delete_document(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ):
     """Delete a document."""
@@ -124,7 +128,7 @@ async def delete_document(
     response_model=DocumentResponse,
     summary="Obtener o completar el texto extraido de un documento",
 )
-async def extract_text(
+def extract_text(
     document_id: int, service: DocumentService = Depends(get_document_service)
 ) -> DocumentResponse:
     """Get or complete the extracted text of a document.
