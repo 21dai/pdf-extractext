@@ -17,7 +17,7 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 
 - Upload real de archivos PDF con `multipart/form-data`.
 - Validacion de nombre, extension `.pdf`, firma `%PDF-` y tamanio maximo.
-- Extraccion de texto con `pypdf` usando memoria, sin guardar temporalmente el PDF en disco.
+- Extraccion de texto con `pypdfium2` (PDFium, el motor de PDF de Chrome) en memoria, sin guardar temporalmente el PDF en disco.
 - Calculo de checksum SHA-256.
 - Rechazo de documentos duplicados por checksum.
 - Persistencia en MongoDB.
@@ -142,8 +142,11 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual es `1.0.1`. La `1.0.0` fue la primera release estable; la
-  `1.0.1` suma el hardening del contenedor (issue #18), sin cambios de comportamiento.
+- La version actual es `1.1.0`. La `1.0.0` fue la primera release estable; la
+  `1.0.1` sumo el hardening del contenedor (issue #18), sin cambios de comportamiento;
+  la `1.1.0` cambia la extraccion a `pypdfium2` (unas 15 veces mas rapida) y agrega
+  `WEB_CONCURRENCY` para correr varios procesos. Es MINOR porque mejora sin romper
+  nada: mismos endpoints, mismas respuestas.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`.
 
@@ -171,12 +174,15 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.0.1
-IMAGE_TAG=1.0.1
+APP_VERSION=1.1.0
+IMAGE_TAG=1.1.0
 DEBUG=False
 
 HOST=0.0.0.0
 PORT=8000
+# Procesos de uvicorn: PDFs que se extraen en paralelo. 1 en desarrollo;
+# en Docker, tantos como nucleos quieras dedicar (la extraccion es CPU).
+WEB_CONCURRENCY=1
 
 DATABASE_URL=mongodb://admin:9009@mongo:27017/?authSource=admin
 DATABASE_NAME=pdf_extract
@@ -314,7 +320,7 @@ Respuesta esperada del healthcheck:
 3. Se valida nombre, extension, firma y tamanio.
 4. Se calcula el checksum SHA-256.
 5. Si el checksum ya existe, el documento se rechaza.
-6. Si es valido, se extrae el texto desde memoria usando `pypdf`.
+6. Si es valido, se extrae el texto desde memoria usando `pypdfium2`.
 7. Se guarda el documento en MongoDB con sus metadatos y texto extraido.
 8. La API devuelve el documento creado.
 
@@ -377,6 +383,75 @@ Los tests estan organizados por capa:
 - `tests/test_validators.py`: reglas de dominio puras, sin I/O.
 - `tests/service/`: la capa de negocio (`DocumentService`) probada por su propia interfaz, sin HTTP.
 - `tests/api/`: el flujo completo por HTTP con `TestClient` y `mongomock`.
+- `tests/load/`: pruebas de carga con k6 (ver la seccion siguiente). No corren con `pytest`.
+
+## Pruebas de carga
+
+Miden la velocidad de respuesta de los endpoints con [k6](https://k6.io), que
+se instala en la maquina (no es una dependencia del proyecto):
+
+```powershell
+winget install k6 --source winget
+```
+
+Con la API levantada en Docker (ver "Ejecucion con Docker"):
+
+```powershell
+k6 run tests/load/documents.js
+```
+
+Cada iteracion sube un PDF distinto (el service rechaza checksums repetidos),
+lo lee por id y consulta `/health`. El script define umbrales (p95 de cada
+endpoint y tasa de errores); si alguno no se cumple, `k6` termina con error.
+
+Parametros opcionales por variable de entorno:
+
+```powershell
+k6 run -e BASE_URL=http://localhost:8000 -e VUS=20 -e DURATION=1m tests/load/documents.js
+```
+
+- `BASE_URL`: URL de la API (por defecto `http://localhost:8000`).
+- `VUS`: usuarios virtuales concurrentes (por defecto 10).
+- `DURATION`: duracion de la prueba (por defecto `30s`).
+
+Linea base medida con la API en Docker, 10 usuarios durante 30 s:
+
+| Endpoint | p50 | p95 |
+|---|---|---|
+| `POST /api/v1/documents` | 74 ms | 125 ms |
+| `GET /api/v1/documents/{id}` | 62 ms | 101 ms |
+| `GET /health` | 36 ms | 65 ms |
+
+### Con Vegeta
+
+`tests/load/vegeta/` replica el flujo de [Vegeta](https://github.com/tsenart/vegeta)
+(`attack` → `report` → `report -type=json` → `plot`), con un PDF grande.
+Vegeta se instala descomprimiendo el zip de sus releases y agregandolo al PATH.
+
+```powershell
+# 1. Generar los targets: 60 PDFs distintos de 279 paginas (67 MB) mas /health y GET
+python tests/load/vegeta/make_targets.py tests/load/vegeta/results/targets --base-url http://127.0.0.1:8000 --pages 279 --variants 60 --document-id 1
+
+# 2. Atacar: <targets> <nombre> [rate] [duracion]
+.\tests\load\vegeta\run.ps1 tests\load\vegeta\results\targets\health.txt health 50 30s
+.\tests\load\vegeta\run.ps1 tests\load\vegeta\results\targets\post_document.txt post_279p 1/2s 30s
+```
+
+`run.sh` es el equivalente para Git Bash o Linux, con los comandos de Vegeta
+tal cual (`attack | tee | report`). Usar `127.0.0.1` y no `localhost`: Vegeta
+en Windows no lo resuelve. Los resultados quedan en `tests/load/vegeta/results/`
+(ignorado por git); el grafico `<nombre>.html` se abre con doble clic. La
+evaluacion con los numeros medidos esta en
+[tests/load/vegeta/EVALUACION.md](tests/load/vegeta/EVALUACION.md).
+
+### Limpieza
+
+Los documentos creados por las pruebas quedan en la base local con nombre
+`carga vu<N> iter<M>` o `vegeta ...`. Para borrarlos:
+
+```powershell
+docker exec docker-mongo-1 mongosh -u admin -p 9009 --authenticationDatabase admin --quiet pdf_extract --eval 'db.documents.deleteMany({ name: { $regex: \"^(carga vu|vegeta)\" } })'
+```
 
 ## Calidad de codigo
 
@@ -420,7 +495,7 @@ Convenciones vigentes:
 
 ## Limitacion conocida
 
-La extraccion actual usa `pypdf`, por lo que obtiene texto digital embebido en el PDF.
+La extraccion actual usa `pypdfium2`, por lo que obtiene texto digital embebido en el PDF.
 
 Si el PDF es escaneado o contiene solo imagenes, `extracted_text` puede quedar vacio. Eso no significa que la API falle: significa que no se esta aplicando OCR.
 
