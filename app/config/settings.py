@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+    # Procesos de uvicorn (factor VIII: concurrencia por procesos). La extraccion
+    # de PDF es CPU y el GIL limita a un nucleo por proceso: con N workers se
+    # procesan N PDFs a la vez. uvicorn lee WEB_CONCURRENCY por convencion.
+    web_concurrency: int = 1
 
     # Database
     database_url: str = "mongodb://localhost:27017"
