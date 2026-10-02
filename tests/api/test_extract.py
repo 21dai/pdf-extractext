@@ -72,6 +72,18 @@ class TestExtractSuccess:
         assert body["content"].strip()
 
 
+class TestExtractReturnsMarkdown:
+    """The content is Markdown: headings come from the size of the letters."""
+
+    def test_section_titles_of_the_scrum_guide_are_headings(self, client: TestClient):
+        source = STRESS_PDFS / "2020-Scrum-Guide-Spanish-Latin-South-American.pdf"
+
+        content = post_raw(client, source.read_bytes()).json()["content"]
+
+        assert "\n## Teoría de Scrum\n" in content
+        assert "\n## Valores de Scrum\n" in content
+
+
 class TestExtractIsStateless:
     """/extract does not persist anything: it is a pure transformation."""
 

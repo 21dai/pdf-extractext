@@ -3,8 +3,12 @@
 import pytest
 
 from app.core.exceptions import PdfUnreadableError
-from app.core.pdf_extraction import extract_pdf, extract_pdf_text
-from tests.support.pdf import build_pdf_bytes
+from app.core.pdf_extraction import (
+    extract_pdf,
+    extract_pdf_markdown,
+    extract_pdf_text,
+)
+from tests.support.pdf import build_pdf_bytes, build_pdf_with_lines
 
 
 def test_extract_pdf_text_returns_embedded_text():
@@ -36,3 +40,31 @@ def test_extract_pdf_raises_unreadable_error_for_corrupt_pdf():
 
     with pytest.raises(ValueError):
         extract_pdf_text(corrupt)
+
+
+def test_extract_pdf_markdown_matches_the_expected_document():
+    """Test a PDF with a title, a section and body text against its Markdown."""
+    source = build_pdf_with_lines(
+        [
+            ("Informe anual", 24),
+            ("Este es el cuerpo del informe con varias palabras", 12),
+            ("Resultados", 18),
+            ("Los resultados fueron buenos para todo el equipo", 12),
+        ]
+    )
+
+    result = extract_pdf_markdown(source)
+
+    assert result.page_count == 1
+    assert result.text == (
+        "# Informe anual\n\n"
+        "Este es el cuerpo del informe con varias palabras\n\n"
+        "## Resultados\n\n"
+        "Los resultados fueron buenos para todo el equipo"
+    )
+
+
+def test_extract_pdf_markdown_raises_unreadable_error_for_corrupt_pdf():
+    """Test the Markdown extraction reports unreadable PDFs like the plain one."""
+    with pytest.raises(PdfUnreadableError):
+        extract_pdf_markdown(b"%PDF-1.4\n" + b"\x00basura" * 50)

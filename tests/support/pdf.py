@@ -3,18 +3,18 @@
 DEFAULT_PDF_TEXT = "Test Document Content"
 
 
-def build_pdf_bytes(text: str = DEFAULT_PDF_TEXT) -> bytes:
-    """Build a minimal valid single-page PDF containing the given text."""
-    escaped_text = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-    stream = f"BT\n/F1 18 Tf\n50 100 Td\n({escaped_text}) Tj\nET\n"
-    stream_bytes = stream.encode("utf-8")
+def _escape_pdf_text(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
+
+def _assemble_pdf(stream_bytes: bytes, media_box: str) -> bytes:
+    """Wrap a content stream in a valid single-page PDF using Helvetica."""
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         (
-            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] "
-            b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [{media_box}] ".encode("utf-8")
+            + b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"
         ),
         (
             f"<< /Length {len(stream_bytes)} >>\nstream\n".encode("utf-8")
@@ -46,6 +46,27 @@ def build_pdf_bytes(text: str = DEFAULT_PDF_TEXT) -> bytes:
     )
 
     return bytes(pdf_bytes)
+
+
+def build_pdf_bytes(text: str = DEFAULT_PDF_TEXT) -> bytes:
+    """Build a minimal valid single-page PDF containing the given text."""
+    stream = f"BT\n/F1 18 Tf\n50 100 Td\n({_escape_pdf_text(text)}) Tj\nET\n"
+    return _assemble_pdf(stream.encode("utf-8"), "0 0 300 144")
+
+
+def build_pdf_with_lines(lines: list[tuple[str, float]]) -> bytes:
+    """Build a single-page PDF with one text line per (text, font size), top-down.
+
+    Lets the Markdown tests control which lines are bigger than the body text.
+    """
+    commands = []
+    y = 760.0
+    for text, size in lines:
+        commands.append(
+            f"BT\n/F1 {size} Tf\n50 {y:.0f} Td\n({_escape_pdf_text(text)}) Tj\nET\n"
+        )
+        y -= size * 2
+    return _assemble_pdf("".join(commands).encode("latin-1"), "0 0 612 792")
 
 
 MINIMAL_PDF_BYTES = build_pdf_bytes()
