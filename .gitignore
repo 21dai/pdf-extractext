@@ -212,3 +212,4 @@ __marimo__/
 
 # Resultados de las pruebas de carga
 tests/load/vegeta/results/
+tests/stress/results/

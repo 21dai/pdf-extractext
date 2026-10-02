@@ -1,2 +1,4 @@
 # Los PDFs de prueba nunca deben pasar por la conversion de fin de linea.
 *.pdf binary
+# Los scripts de shell se ejecutan en Linux: siempre con LF.
+*.sh text eol=lf
