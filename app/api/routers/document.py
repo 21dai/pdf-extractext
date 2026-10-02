@@ -24,7 +24,7 @@ from app.utils.database import get_db
 
 router = APIRouter(prefix="/documents", tags=["documentos"])
 
-# Los endpoints son sincronicos a proposito: el service usa PyMongo y pypdf,
+# Los endpoints son sincronicos a proposito: el service usa PyMongo y PDFium,
 # que bloquean. Declarados con `def`, FastAPI los ejecuta en un pool de hilos
 # y el event loop sigue atendiendo otras peticiones mientras se extrae un PDF.
 

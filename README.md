@@ -15,6 +15,8 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 
 ## Estado actual
 
+- `POST /extract` sin estado, el endpoint del TP: recibe un PDF (body crudo o
+  multipart) y devuelve su contenido en Markdown y su cantidad de paginas.
 - Upload real de archivos PDF con `multipart/form-data`.
 - Validacion de nombre, extension `.pdf`, firma `%PDF-` y tamanio maximo.
 - Extraccion de texto con `pypdfium2` (PDFium, el motor de PDF de Chrome) en memoria, sin guardar temporalmente el PDF en disco.
@@ -142,11 +144,14 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual es `1.1.0`. La `1.0.0` fue la primera release estable; la
+- La version actual es `1.2.0`. La `1.0.0` fue la primera release estable; la
   `1.0.1` sumo el hardening del contenedor (issue #18), sin cambios de comportamiento;
   la `1.1.0` cambia la extraccion a `pypdfium2` (unas 15 veces mas rapida) y agrega
   `WEB_CONCURRENCY` para correr varios procesos. Es MINOR porque mejora sin romper
   nada: mismos endpoints, mismas respuestas.
+- La `1.2.0` agrega `POST /extract` (Markdown + `page_count`, sin estado) y
+  `DOCUMENTS_API_ENABLED` para correr el servicio solo como extractor. Tambien es
+  MINOR: el CRUD responde exactamente igual.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`.
 
@@ -174,8 +179,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.1.0
-IMAGE_TAG=1.1.0
+APP_VERSION=1.2.0
+IMAGE_TAG=1.2.0
 DEBUG=False
 
 HOST=0.0.0.0
@@ -188,6 +193,8 @@ DATABASE_URL=mongodb://admin:9009@mongo:27017/?authSource=admin
 DATABASE_NAME=pdf_extract
 DATABASE_TIMEOUT_MS=3000
 MAX_PDF_SIZE_BYTES=10485760
+# false: solo POST /extract, sin MongoDB ni CRUD (las replicas del TP).
+DOCUMENTS_API_ENABLED=true
 
 API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
@@ -305,6 +312,7 @@ Respuesta esperada del healthcheck:
 
 ## Endpoints principales
 
+- `POST /extract` (sin estado, ver la seccion siguiente)
 - `POST /api/v1/documents`
 - `GET /api/v1/documents`
 - `GET /api/v1/documents/{document_id}`
@@ -312,6 +320,44 @@ Respuesta esperada del healthcheck:
 - `DELETE /api/v1/documents/{document_id}`
 - `POST /api/v1/documents/{document_id}/extract`
 - `GET /health`
+
+## POST /extract (TP de carga y estres)
+
+Endpoint que pide la consigna del TP. Recibe el PDF como body crudo
+(`Content-Type: application/pdf`) o como campo `file` de un multipart, y
+responde `200`:
+
+```json
+{ "content": "# Titulo\n\nTexto...", "page_count": 16 }
+```
+
+- No guarda nada: no calcula checksum ni rechaza duplicados; el mismo PDF se
+  puede mandar las veces que haga falta.
+- `content` es Markdown: los titulos salen de la altura de las letras
+  (`app/core/markdown.py`) y las vinetas como items de lista.
+- Errores en formato RFC 9457: `400` si no es un PDF o esta vacio, `413` si
+  supera `MAX_PDF_SIZE_BYTES`, `422` si PDFium no puede leerlo.
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/extract -H "Content-Type: application/pdf" --data-binary "@tests/stress/pdfs/Filosofia Lean.pdf"
+```
+
+### Stack del TP: 5 replicas detras de Traefik
+
+El `docker-compose.yml` de la raiz levanta Traefik y 5 replicas de
+`/extract` (1 CPU y 1 GB cada una, sin MongoDB), con un solo comando:
+
+```powershell
+docker compose up --build
+```
+
+Queda en `http://127.0.0.1/extract` y en
+`https://extract.universidad.localhost/extract`; el dashboard de Traefik en
+`http://localhost:8080/dashboard/`. Usa los mismos puertos que el stack
+completo del repo `infrastructure`: no levantar los dos a la vez. Las pruebas
+de carga del TP estan en [tests/stress](tests/stress/README.md), el plan en
+[docs/PLAN-TP.md](docs/PLAN-TP.md) y las mediciones en
+[docs/INFORME-TP.md](docs/INFORME-TP.md).
 
 ## Flujo principal
 
