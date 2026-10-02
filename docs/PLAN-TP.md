@@ -64,7 +64,7 @@ duplicados y escribe el texto en Mongo en cada request.
 - [ ] **F0-8** Ruta directa de Traefik a `/extract`, sin pasar por el
   orquestador, en el host `extract.universidad.localhost` que usa el script
   del profesor.
-- [ ] **F0-9** PDFs de prueba en `tests/stress/pdfs/`.
+- [x] **F0-9** PDFs de prueba en `tests/stress/pdfs/`.
 - [ ] **F0-10** Scripts de k6 (spike) y Vegeta (50 req/s) dentro del repo, en
   `tests/stress/`.
 - [ ] **F0-11** `docker compose up --build` autocontenido en este repo

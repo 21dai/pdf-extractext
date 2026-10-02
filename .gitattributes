@@ -1,0 +1,2 @@
+# Los PDFs de prueba nunca deben pasar por la conversion de fin de linea.
+*.pdf binary
