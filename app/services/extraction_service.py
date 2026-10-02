@@ -1,6 +1,6 @@
 """Stateless extraction service behind POST /extract."""
 
-from app.core.pdf_extraction import PdfExtraction, extract_pdf
+from app.core.pdf_extraction import PdfExtraction, extract_pdf_markdown
 from app.core.validators import validate_pdf_signature, validate_pdf_size
 
 
@@ -21,7 +21,7 @@ class ExtractionService:
         self.max_pdf_size_bytes = max_pdf_size_bytes
 
     def extract(self, content: bytes) -> PdfExtraction:
-        """Validate the PDF bytes and extract their text and page count.
+        """Validate the PDF bytes and extract their content as Markdown.
 
         Raises:
             InvalidPdfError: If the content is empty or is not a PDF.
@@ -30,4 +30,4 @@ class ExtractionService:
         """
         validate_pdf_size(content, self.max_pdf_size_bytes)
         validate_pdf_signature(content)
-        return extract_pdf(content)
+        return extract_pdf_markdown(content)

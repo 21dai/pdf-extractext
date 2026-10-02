@@ -65,7 +65,7 @@ def create_app() -> FastAPI:
         register_extraction_only_health(app)
 
     @app.get("/", tags=["inicio"], summary="Ver informacion basica de la API")
-    async def root():
+    async def root() -> dict[str, Any]:
         """Mostrar informacion general de la API."""
         info: dict[str, Any] = {
             "message": f"Bienvenido a {settings.app_name}",

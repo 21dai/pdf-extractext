@@ -41,6 +41,14 @@ class TestHeadings:
 
         assert markdown == f"# Informacion necesaria de usuario\n\n{LONG_BODY}"
 
+    def test_consecutive_headings_of_different_size_are_not_merged(self):
+        """Like a cover page: author and title, both big, but not the same line."""
+        markdown = to_markdown(
+            [page(("Ken Schwaber", 24), ("La Guia de Scrum", 66), (LONG_BODY, BODY))]
+        )
+
+        assert markdown == f"# Ken Schwaber\n\n# La Guia de Scrum\n\n{LONG_BODY}"
+
     def test_long_lines_are_never_headings(self):
         long_line = "Una linea grande que en realidad es un parrafo destacado " * 2
 

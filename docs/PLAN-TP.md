@@ -53,7 +53,7 @@ duplicados y escribe el texto en Mongo en cada request.
   tambien multipart.
 - [x] **F0-2** Respuesta `200` con `{"content", "page_count"}` en un schema
   propio, separado de `DocumentResponse`.
-- [ ] **F0-3** Conversion a Markdown (hoy se devuelve texto plano).
+- [x] **F0-3** Conversion a Markdown (hoy se devuelve texto plano).
 - [x] **F0-4** `/extract` sin estado: sin MongoDB, sin checksum, sin
   duplicados (12-Factor VI). El CRUD de `/api/v1/documents` no cambia.
 - [ ] **F0-5** Quitar `container_name` del servicio en el compose: impide
@@ -150,7 +150,7 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
   en rojo, despues el verde, despues el refactor.
 - [ ] **F3-2** Tests de `/extract`: `200`, `400` no es PDF, `413` demasiado
   grande, `422` PDF ilegible, `503` saturado, body crudo y multipart.
-- [ ] **F3-3** Tests del conversor a Markdown con archivos de referencia
+- [x] **F3-3** Tests del conversor a Markdown con archivos de referencia
   (PDF de fixture y su `.md` esperado).
 - [ ] **F3-4** Motor de extraccion detras de una interfaz, para poder cambiarlo
   y medir sin tocar el router.
