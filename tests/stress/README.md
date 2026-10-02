@@ -23,6 +23,31 @@ Vegeta: descomprimir el zip de
 `%LOCALAPPDATA%\Programs\vegeta` (el script lo busca ahi si no esta en el
 PATH).
 
+## Levantar el servicio
+
+Desde la raiz del repo, el stack del TP (Traefik + 5 replicas de `/extract`):
+
+```powershell
+docker compose up --build -d
+docker compose ps
+```
+
+Esperar a que las 5 replicas digan `healthy` antes de medir: mientras
+arrancan, Traefik no tiene a donde mandar el trafico y responde 404.
+
+## Medir desde dentro de la red de Docker (recomendado en Windows)
+
+En Windows, el trafico de la PC a los contenedores pasa por el reenvio de
+puertos de Docker Desktop, que con uploads grandes y concurrentes se vuelve el
+cuello de botella y esconde el rendimiento real del servicio (ver
+[el informe](../../docs/INFORME-TP.md#hallazgo-1-el-reenvio-de-puertos-de-docker-desktop-distorsiona-la-medicion)).
+Para medir como en Linux, correr k6 en un contenedor dentro de la red del
+stack:
+
+```powershell
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
+```
+
 ## A. Spike con k6 (modelo cerrado)
 
 Perfil del profesor: 100 VUs, 10 s de subida, 20 s sostenidos, 10 s de
