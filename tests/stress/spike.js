@@ -24,8 +24,14 @@ const ETAPAS = {
   bajada: __ENV.BAJADA || "10s",
 };
 
+// Los nombres *.localhost siempre son la propia maquina (RFC 6761), pero el
+// resolver de k6 en Windows no lo sabe: se los resuelve el script.
+const HOST = (BASE_URL.match(/^https?:\/\/([^/:]+)/) || [])[1] || "";
+const HOSTS = HOST.endsWith(".localhost") ? { [HOST]: "127.0.0.1" } : {};
+
 export const options = {
-  insecureSkipTLSVerify: true, // certificado local de mkcert
+  hosts: HOSTS,
+  insecureSkipTLSVerify: true, // certificado autofirmado de Traefik o de mkcert
   stages: [
     { duration: ETAPAS.subida, target: VUS },
     { duration: ETAPAS.meseta, target: VUS },
@@ -81,9 +87,13 @@ export default function () {
   const res = enviar(pdf);
 
   const ok = res.status === 200;
-  pdf.tiempo.add(res.timings.duration);
+  // Las latencias se miden sobre las respuestas 200, como las del profesor:
+  // un error inmediato no puede mejorar la mediana.
+  if (ok) {
+    pdf.tiempo.add(res.timings.duration);
+    tiempoTotal.add(res.timings.duration);
+  }
   pdf.exito.add(ok);
-  tiempoTotal.add(res.timings.duration);
   exitoTotal.add(ok);
   (porCodigo[String(res.status)] || otrosCodigos).add(1);
   check(res, {
@@ -111,10 +121,10 @@ function pct(rate) {
 
 function fila(nombre, exito, tiempo) {
   const enviados = exito.values.passes + exito.values.fails;
+  const t = (clave) => (tiempo ? seg(tiempo.values[clave]) : "-").padStart(10);
   return (
     "  " + nombre.padEnd(36) + String(enviados).padStart(9) + String(exito.values.passes).padStart(8) +
-    pct(exito.values.rate).padStart(8) + seg(tiempo.values.med).padStart(10) + seg(tiempo.values["p(90)"]).padStart(10) +
-    seg(tiempo.values["p(95)"]).padStart(10) + seg(tiempo.values.max).padStart(10)
+    pct(exito.values.rate).padStart(8) + t("med") + t("p(90)") + t("p(95)") + t("max")
   );
 }
 
@@ -149,22 +159,22 @@ export function handleSummary(data) {
   l.push("  " + "-".repeat(ancho - 2));
 
   for (const pdf of PDFS) {
-    const t = m[`tiempo_${pdf.clave}`];
     const e = m[`exito_${pdf.clave}`];
-    if (t && e) l.push(fila(pdf.corto, e, t));
+    if (e) l.push(fila(pdf.corto, e, m[`tiempo_${pdf.clave}`]));
   }
 
   const t = m.tiempo_por_documento;
   const e = m.exito_por_documento;
   l.push("  " + "-".repeat(ancho - 2));
-  if (!t || !e) {
+  if (!e) {
     l.push("  No se completo ningun request.");
     l.push("=".repeat(ancho));
     return { stdout: l.join("\n") + "\n" };
   }
 
   const enviados = e.values.passes + e.values.fails;
-  const throughput = enviados / duracion;
+  // Throughput de respuestas 200: lo que el servicio efectivamente proceso.
+  const throughput = e.values.passes / duracion;
   l.push(fila("TOTAL", e, t));
   l.push("");
   const codigos = CODIGOS.map((c) => [c === "0" ? "sin respuesta" : c, m[`codigo_${c}`]])
@@ -173,8 +183,9 @@ export function handleSummary(data) {
     .map(([c, v]) => `${c} -> ${v.values.count}`)
     .join("     ");
   l.push(`  Respuestas por codigo HTTP:   ${codigos}`);
-  l.push(`  Throughput:                   ${throughput.toFixed(2)} req/s`);
+  l.push(`  Throughput (200 OK):          ${throughput.toFixed(2)} req/s`);
   l.push(`  EXITO GLOBAL:                 ${pct(e.values.rate).trim()}   (${e.values.passes} de ${enviados} con 200 OK)`);
+  l.push("  Latencias calculadas sobre las respuestas 200.");
 
   const perfilDelProfesor =
     VUS === 100 && ETAPAS.subida === "10s" && ETAPAS.meseta === "20s" && ETAPAS.bajada === "10s";
@@ -185,13 +196,15 @@ export function handleSummary(data) {
   const rps = (v) => v.toFixed(2) + " req/s";
   const porc = (v) => v.toFixed(2) + " %";
   const s = (v) => v.toFixed(2) + " s";
-  l.push(filaComparacion("Peticiones", enviados, PROFESOR.peticiones, num, true));
+  l.push(filaComparacion("Peticiones 200 OK", e.values.passes, PROFESOR.peticiones, num, true));
   l.push(filaComparacion("Throughput", throughput, PROFESOR.throughput, rps, true));
   l.push(filaComparacion("Tasa de error", (1 - e.values.rate) * 100, PROFESOR.error, porc, false));
-  l.push(filaComparacion("Latencia p50", t.values.med / 1000, PROFESOR.p50, s, false));
-  l.push(filaComparacion("Latencia p90", t.values["p(90)"] / 1000, PROFESOR.p90, s, false));
-  l.push(filaComparacion("Latencia p95", t.values["p(95)"] / 1000, PROFESOR.p95, s, false));
-  l.push(filaComparacion("Latencia maxima", t.values.max / 1000, PROFESOR.max, s, false));
+  if (t) {
+    l.push(filaComparacion("Latencia p50", t.values.med / 1000, PROFESOR.p50, s, false));
+    l.push(filaComparacion("Latencia p90", t.values["p(90)"] / 1000, PROFESOR.p90, s, false));
+    l.push(filaComparacion("Latencia p95", t.values["p(95)"] / 1000, PROFESOR.p95, s, false));
+    l.push(filaComparacion("Latencia maxima", t.values.max / 1000, PROFESOR.max, s, false));
+  }
   if (!perfilDelProfesor) {
     l.push("");
     l.push("  Aviso: el perfil de carga no es el del profesor (100 VUs, 10s/20s/10s); la comparacion no es valida.");
