@@ -8,6 +8,7 @@ import hashlib
 
 import pytest
 
+from app.core.exceptions import InvalidPdfError, PdfTooLargeError
 from app.core.validators import (
     MAX_DOCUMENT_NAME_LENGTH,
     MAX_ORIGINAL_FILENAME_LENGTH,
@@ -223,3 +224,20 @@ class TestValidatePagination:
 
     def test_limit_exactly_max(self):
         assert validate_pagination(0, MAX_PAGINATION_LIMIT) == (0, MAX_PAGINATION_LIMIT)
+
+
+# ---------------------------------------------------------------------------
+# Domain error types: /extract maps each one to its own HTTP status
+# ---------------------------------------------------------------------------
+class TestPdfValidationErrorTypes:
+    def test_oversized_raises_pdf_too_large(self):
+        with pytest.raises(PdfTooLargeError):
+            validate_pdf_size(b"%PDF-1.4" + b"x" * 100, max_size_bytes=50)
+
+    def test_empty_content_raises_invalid_pdf(self):
+        with pytest.raises(InvalidPdfError):
+            validate_pdf_size(b"", max_size_bytes=50)
+
+    def test_missing_signature_raises_invalid_pdf(self):
+        with pytest.raises(InvalidPdfError):
+            validate_pdf_signature(b"this is not a pdf")
