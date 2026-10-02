@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     database_name: str = "pdf_extract"
     database_timeout_ms: int = 3000
     max_pdf_size_bytes: int = 10 * 1024 * 1024
+    # Con false el servicio solo expone POST /extract: no usa MongoDB, arranca
+    # sin base de datos y sus replicas no comparten estado (12-Factor VI).
+    documents_api_enabled: bool = True
 
     # MongoDB Auth
     root_username: str = ""

@@ -20,7 +20,8 @@ async def lifespan(app: FastAPI):
     Args:
         app: FastAPI application
     """
-    create_tables()
+    if settings.documents_api_enabled:
+        create_tables()
     print(f"[OK] {settings.app_name} started successfully")
 
     yield
@@ -55,20 +56,41 @@ def create_app() -> FastAPI:
     )
 
     register_problem_details_handlers(app)
-    app.include_router(document_router, prefix=settings.api_v1_prefix)
     # Contrato del TP: la ruta es /extract, sin el prefijo versionado.
     app.include_router(extract_router)
+    if settings.documents_api_enabled:
+        app.include_router(document_router, prefix=settings.api_v1_prefix)
+        register_database_health(app)
+    else:
+        register_extraction_only_health(app)
 
     @app.get("/", tags=["inicio"], summary="Ver informacion basica de la API")
     async def root():
         """Mostrar informacion general de la API."""
-        return {
+        info: dict[str, Any] = {
             "message": f"Bienvenido a {settings.app_name}",
             "version": settings.app_version,
             "docs": settings.api_docs_url,
-            "database": "mongodb",
-            "database_name": settings.database_name,
         }
+        if settings.documents_api_enabled:
+            info["database"] = "mongodb"
+            info["database_name"] = settings.database_name
+        return info
+
+    return app
+
+
+def register_extraction_only_health(app: FastAPI) -> None:
+    """Health check of the extractor: the process answers, no database involved."""
+
+    @app.get("/health", tags=["inicio"], summary="Verificar estado de la API")
+    def health():
+        """Verificar que la API este disponible."""
+        return {"status": "ok"}
+
+
+def register_database_health(app: FastAPI) -> None:
+    """Health check of the full service, which needs MongoDB to work."""
 
     @app.get("/health", tags=["inicio"], summary="Verificar estado de la API")
     def health(db: Any = Depends(get_db)):
@@ -86,5 +108,3 @@ def create_app() -> FastAPI:
             "database": "mongodb",
             "database_name": settings.database_name,
         }
-
-    return app
