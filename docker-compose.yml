@@ -1,0 +1,80 @@
+# Stack del TP de carga y estres: Traefik + 5 replicas de POST /extract.
+#
+#   docker compose up --build
+#
+# Autocontenido: no necesita MongoDB ni los otros repos del proyecto. Las
+# replicas corren con DOCUMENTS_API_ENABLED=false (solo /extract, sin estado).
+# El stack completo (orquestador + CRUD + MongoDB) esta en el repo
+# infrastructure; usa los mismos puertos, asi que no levantar los dos a la vez.
+#
+#   POST http://127.0.0.1/extract                     (Vegeta)
+#   POST https://extract.universidad.localhost/extract  (k6; certificado
+#        autofirmado de Traefik: usar --insecure-skip-tls-verify)
+#   Dashboard de Traefik: http://localhost:8080/dashboard/
+name: pdf-extractext-tp
+
+services:
+  traefik:
+    image: traefik:v3.7.13
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  extract:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: pdf-extractext:${IMAGE_TAG:-1.2.0}
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      DOCUMENTS_API_ENABLED: "false"
+      # Un proceso por replica: con 1 CPU de limite, mas procesos compiten
+      # por el mismo nucleo (a medir en la Fase 2 del plan).
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      MAX_PDF_SIZE_BYTES: 10485760
+    deploy:
+      # Maximo que permite la consigna del TP.
+      replicas: 5
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      # Una sola aplicacion detras del proxy: todo el trafico va a las replicas.
+      - "traefik.http.routers.extract.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.extract.entrypoints=web"
+      - "traefik.http.routers.extract-tls.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.extract-tls.entrypoints=websecure"
+      - "traefik.http.routers.extract-tls.tls=true"
+      - "traefik.http.services.extract.loadbalancer.server.port=8000"

@@ -67,7 +67,7 @@ duplicados y escribe el texto en Mongo en cada request.
 - [x] **F0-9** PDFs de prueba en `tests/stress/pdfs/`.
 - [x] **F0-10** Scripts de k6 (spike) y Vegeta (50 req/s) dentro del repo, en
   `tests/stress/`.
-- [ ] **F0-11** `docker compose up --build` autocontenido en este repo
+- [x] **F0-11** `docker compose up --build` autocontenido en este repo
   (Traefik + extract x5 con limites), sin depender de los repos hermanos.
 
 ## Fase 1: problemas del proyecto actual
