@@ -48,13 +48,13 @@ duplicados y escribe el texto en Mongo en cada request.
 
 ## Fase 0: requisitos de la consigna
 
-- [ ] **F0-1** `POST /extract` que acepte el PDF crudo en el body
+- [x] **F0-1** `POST /extract` que acepte el PDF crudo en el body
   (`Content-Type: application/pdf`, como el `spike_tests.js` del profesor) y
   tambien multipart.
-- [ ] **F0-2** Respuesta `200` con `{"content", "page_count"}` en un schema
+- [x] **F0-2** Respuesta `200` con `{"content", "page_count"}` en un schema
   propio, separado de `DocumentResponse`.
 - [ ] **F0-3** Conversion a Markdown (hoy se devuelve texto plano).
-- [ ] **F0-4** `/extract` sin estado: sin MongoDB, sin checksum, sin
+- [x] **F0-4** `/extract` sin estado: sin MongoDB, sin checksum, sin
   duplicados (12-Factor VI). El CRUD de `/api/v1/documents` no cambia.
 - [ ] **F0-5** Quitar `container_name` del servicio en el compose: impide
   escalar.
@@ -146,7 +146,7 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 
 ### TDD y Codigo Limpio
 
-- [ ] **F3-1** `/extract` con el ciclo visible en el historial: commit del test
+- [x] **F3-1** `/extract` con el ciclo visible en el historial: commit del test
   en rojo, despues el verde, despues el refactor.
 - [ ] **F3-2** Tests de `/extract`: `200`, `400` no es PDF, `413` demasiado
   grande, `422` PDF ilegible, `503` saturado, body crudo y multipart.
@@ -154,7 +154,7 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
   (PDF de fixture y su `.md` esperado).
 - [ ] **F3-4** Motor de extraccion detras de una interfaz, para poder cambiarlo
   y medir sin tocar el router.
-- [ ] **F3-5** Errores de `/extract` en RFC 7807, como el resto del servicio.
+- [x] **F3-5** Errores de `/extract` en RFC 9457 (sucesor de 7807), como el resto del servicio.
 
 ## Fase 4: entregables
 

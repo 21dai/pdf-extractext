@@ -7,6 +7,8 @@ and return a validated/transformed value on success.
 import hashlib
 from pathlib import Path
 
+from app.core.exceptions import InvalidPdfError, PdfTooLargeError
+
 MAX_DOCUMENT_NAME_LENGTH = 255
 MAX_ORIGINAL_FILENAME_LENGTH = 255
 MAX_PAGINATION_LIMIT = 100
@@ -105,15 +107,32 @@ def validate_pdf_size(file_content: bytes, max_size_bytes: int) -> None:
         max_size_bytes: Maximum permitted size in bytes.
 
     Raises:
-        ValueError: If the file is empty or exceeds the size limit.
+        InvalidPdfError: If the file is empty.
+        PdfTooLargeError: If the file exceeds the size limit.
     """
     file_size = len(file_content)
 
     if file_size == 0:
-        raise ValueError("Archivo PDF invalido")
+        raise InvalidPdfError("Archivo PDF invalido")
 
-    if file_size > max_size_bytes:
-        raise ValueError(
+    validate_pdf_size_limit(file_size, max_size_bytes)
+
+
+def validate_pdf_size_limit(size_bytes: int, max_size_bytes: int) -> None:
+    """Validate a size in bytes against the limit, before reading the content.
+
+    Lets the API reject an upload by its declared Content-Length without
+    loading it into memory.
+
+    Args:
+        size_bytes: Size of the content in bytes.
+        max_size_bytes: Maximum permitted size in bytes.
+
+    Raises:
+        PdfTooLargeError: If the size exceeds the limit.
+    """
+    if size_bytes > max_size_bytes:
+        raise PdfTooLargeError(
             f"El PDF supera el tamano maximo permitido de {max_size_bytes} bytes"
         )
 
@@ -131,10 +150,10 @@ def validate_pdf_signature(file_content: bytes) -> None:
         file_content: Raw bytes of the uploaded file.
 
     Raises:
-        ValueError: If the content does not start with the PDF signature.
+        InvalidPdfError: If the content does not start with the PDF signature.
     """
     if not file_content.startswith(PDF_SIGNATURE):
-        raise ValueError("Archivo PDF invalido")
+        raise InvalidPdfError("Archivo PDF invalido")
 
 
 # ---------------------------------------------------------------------------

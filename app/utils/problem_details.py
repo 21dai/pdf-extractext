@@ -8,7 +8,13 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.core.exceptions import CannotReprocessError, DocumentNotFoundError
+from app.core.exceptions import (
+    CannotReprocessError,
+    DocumentNotFoundError,
+    InvalidPdfError,
+    PdfTooLargeError,
+    PdfUnreadableError,
+)
 
 
 async def _domain_exception_response(
@@ -95,3 +101,23 @@ def register_problem_details_handlers(app: FastAPI) -> None:
     @app.exception_handler(CannotReprocessError)
     async def cannot_reprocess_handler(request: Request, exc: CannotReprocessError):
         return await _domain_exception_response(request, exc, status.HTTP_409_CONFLICT)
+
+    # Los routers del CRUD capturan ValueError y responden 400 ellos mismos;
+    # estos handlers aplican a /extract, que deja propagar los errores.
+    @app.exception_handler(InvalidPdfError)
+    async def invalid_pdf_handler(request: Request, exc: InvalidPdfError):
+        return await _domain_exception_response(
+            request, exc, status.HTTP_400_BAD_REQUEST
+        )
+
+    @app.exception_handler(PdfTooLargeError)
+    async def pdf_too_large_handler(request: Request, exc: PdfTooLargeError):
+        return await _domain_exception_response(
+            request, exc, status.HTTP_413_CONTENT_TOO_LARGE
+        )
+
+    @app.exception_handler(PdfUnreadableError)
+    async def pdf_unreadable_handler(request: Request, exc: PdfUnreadableError):
+        return await _domain_exception_response(
+            request, exc, status.HTTP_422_UNPROCESSABLE_CONTENT
+        )

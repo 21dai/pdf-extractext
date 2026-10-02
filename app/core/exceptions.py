@@ -32,3 +32,15 @@ class CannotReprocessError(ValueError):
             detail: Human-readable reason why reprocessing is not possible
         """
         super().__init__(detail)
+
+
+class InvalidPdfError(ValueError):
+    """Raised when the uploaded content is empty or is not a PDF."""
+
+
+class PdfTooLargeError(ValueError):
+    """Raised when the uploaded PDF exceeds the configured size limit."""
+
+
+class PdfUnreadableError(ValueError):
+    """Raised when the content looks like a PDF but the engine cannot read it."""
