@@ -56,12 +56,12 @@ duplicados y escribe el texto en Mongo en cada request.
 - [x] **F0-3** Conversion a Markdown (hoy se devuelve texto plano).
 - [x] **F0-4** `/extract` sin estado: sin MongoDB, sin checksum, sin
   duplicados (12-Factor VI). El CRUD de `/api/v1/documents` no cambia.
-- [ ] **F0-5** Quitar `container_name` del servicio en el compose: impide
+- [x] **F0-5** Quitar `container_name` del servicio en el compose: impide
   escalar.
-- [ ] **F0-6** 5 replicas con `deploy.replicas`.
-- [ ] **F0-7** Limites de CPU y memoria por replica con
+- [x] **F0-6** 5 replicas con `deploy.replicas`.
+- [x] **F0-7** Limites de CPU y memoria por replica con
   `deploy.resources.limits`, ajustados midiendo el pico de RAM.
-- [ ] **F0-8** Ruta directa de Traefik a `/extract`, sin pasar por el
+- [x] **F0-8** Ruta directa de Traefik a `/extract`, sin pasar por el
   orquestador, en el host `extract.universidad.localhost` que usa el script
   del profesor.
 - [x] **F0-9** PDFs de prueba en `tests/stress/pdfs/`.

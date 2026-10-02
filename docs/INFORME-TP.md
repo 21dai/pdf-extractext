@@ -78,6 +78,45 @@ mismo GIL y por la misma cuota de 1 CPU. Es exactamente lo que apuntan las
 pistas 2 y 4 de la consigna (control de concurrencia y pool de workers
 separado del runtime HTTP), y es lo primero a atacar en la Fase 2 del plan.
 
+## Fin de la Fase 0 (2026-10-02, version 1.2.0)
+
+Con todos los requisitos de la consigna cumplidos: `/extract` devuelve
+Markdown, 5 replicas sin estado con limites de recursos y ruta directa en
+Traefik. Spike del profesor con k6 dentro de la red de Docker:
+
+| Corrida | Exito | Throughput (200) | p50 | p90 | p95 | Max |
+|---|---|---|---|---|---|---|
+| **Profesor** | 100 % | **25,35 req/s** | 1,88 s | 7,83 s | 8,80 s | 13,94 s |
+| Linea base (texto plano) | 100 % | 7,75 req/s | 11,06 s | 15,75 s | 16,94 s | 18,68 s |
+| **Fase 0 (Markdown)** | 100 % | 5,80 req/s | 13,99 s | 17,82 s | 18,90 s | 20,88 s |
+
+### Costo del Markdown
+
+El Markdown se arma con una heuristica propia (`app/core/markdown.py`): la
+altura de letra mas frecuente es el cuerpo, y las lineas cortas con letra
+1,15x / 1,35x / 1,8x mas grande son titulos de nivel 3, 2 y 1. No se uso una
+libreria porque las que generan Markdown de PDF son AGPL (PyMuPDF4LLM) o
+cargan modelos de ML, mucho mas lentos.
+
+Tiempo de CPU promedio de los 4 PDFs en un contenedor con 1 CPU:
+
+| Version | Extraccion | Sobre el texto plano |
+|---|---|---|
+| Texto plano | 124 ms | - |
+| Markdown, mediana de 3 letras por linea | 178 ms | +48 % |
+| **Markdown, 1 letra cerca del centro** | **151 ms** | **+22 %** |
+
+Medir una sola letra da exactamente el mismo Markdown en los 4 PDFs. La caida
+de throughput entre la linea base y la Fase 0 (7,75 -> 5,80 req/s) es mayor
+que ese +22 %: las corridas en Docker Desktop tienen bastante variacion entre
+si, algo a controlar en la Fase 2 repitiendo cada medicion.
+
+### Memoria
+
+Pico de memoria por replica durante el spike: entre 363 y 440 MiB. El limite
+de 1 GB deja margen; uno de 512 MB quedaria al borde de que Docker mate el
+contenedor por falta de memoria.
+
 ## Como reproducir
 
 ```powershell
