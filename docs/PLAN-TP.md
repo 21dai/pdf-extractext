@@ -75,7 +75,7 @@ duplicados y escribe el texto en Mongo en cada request.
 - [x] **F1-1** Los uploads de mas de 1 MB se escriben a disco: `UploadFile` de
   Starlette usa un archivo temporal a partir de 1 MB. En `/extract`, leer el
   body en memoria y rechazar por `Content-Length` antes de leerlo.
-- [ ] **F1-2** Agregar CI (GitHub Actions: black, isort, flake8, mypy, pytest
+- [x] **F1-2** Agregar CI (GitHub Actions: black, isort, flake8, mypy, pytest
   y build de la imagen). El orquestador ya lo tiene.
 - [ ] **F1-3** Sacar las credenciales de MongoDB del compose de
   `infrastructure` a un `.env` (12-Factor III).
