@@ -13,7 +13,11 @@ La compuerta:
 2. Corre una extraccion por vez: los admitidos esperan en un semaforo de
    asyncio (barato) en vez de bloquear un hilo cada uno contra el lock de
    PDFium. El event loop sigue atendiendo HTTP mientras se extrae.
-3. Antes de extraer, si el cliente ya se fue, no hace el trabajo.
+3. Cuando le toca el turno, si el cliente ya se fue o si el request ya
+   espero mas que el maximo (su tiempo util), no hace el trabajo: el
+   primero no tiene a quien responderle y el segundo recibe 503 al instante.
+   Este chequeo es exacto; la estimacion del punto 1 solo corta lo que
+   claramente no va a llegar.
 """
 
 import asyncio
@@ -61,9 +65,12 @@ class AdmissionGate:
         """
         estimated_wait = self.pending * self.service_seconds
         if estimated_wait > self.max_wait_seconds:
-            raise ServiceOverloadedError(max(1, math.ceil(estimated_wait)))
+            raise self._overloaded(estimated_wait)
         self.pending += 1
-        return Ticket(self)
+        return Ticket(self, admitted_at=self._clock())
+
+    def _overloaded(self, estimated_wait: float) -> ServiceOverloadedError:
+        return ServiceOverloadedError(max(1, math.ceil(estimated_wait)))
 
     def _observe(self, seconds: float) -> None:
         self.service_seconds += self.smoothing * (seconds - self.service_seconds)
@@ -72,8 +79,9 @@ class AdmissionGate:
 class Ticket:
     """Place of an admitted request; free it with `release` or a with block."""
 
-    def __init__(self, gate: AdmissionGate):
+    def __init__(self, gate: AdmissionGate, admitted_at: float):
         self._gate = gate
+        self._admitted_at = admitted_at
         self._released = False
 
     def __enter__(self) -> "Ticket":
@@ -96,12 +104,16 @@ class Ticket:
 
         Raises:
             ClientDisconnectedError: If the client disconnected while waiting.
+            ServiceOverloadedError: If it waited longer than the maximum.
         """
-        async with self._gate._turn:
+        gate = self._gate
+        async with gate._turn:
             if await is_disconnected():
                 raise ClientDisconnectedError()
-            started = self._gate._clock()
+            started = gate._clock()
+            if started - self._admitted_at > gate.max_wait_seconds:
+                raise gate._overloaded(gate.pending * gate.service_seconds)
             try:
                 return await work()
             finally:
-                self._gate._observe(self._gate._clock() - started)
+                gate._observe(gate._clock() - started)
