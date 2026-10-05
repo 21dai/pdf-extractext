@@ -56,6 +56,11 @@ servicio. El profesor mide en Linux, donde ese reenvio no existe, asi que
 
 ### Hallazgo 2: con 20 requests concurrentes por replica, cada request cuesta 3 veces mas CPU
 
+> **Corregido en la Fase 2** (ver "Diagnostico"): midiendo el tiempo de CPU
+> del proceso, el costo por request es el mismo con 1, 5 o 20 requests
+> concurrentes. La estimacion de abajo salia de `docker stats` con 5 replicas,
+> Traefik y k6 compitiendo por los mismos nucleos.
+
 Tiempo de CPU de la extraccion sola, en un contenedor con 1 CPU:
 
 | PDF | Paginas | Extraccion | JSON |
@@ -116,6 +121,76 @@ si, algo a controlar en la Fase 2 repitiendo cada medicion.
 Pico de memoria por replica durante el spike: entre 363 y 440 MiB. El limite
 de 1 GB deja margen; uno de 512 MB quedaria al borde de que Docker mate el
 contenedor por falta de memoria.
+
+## Fase 2: diagnostico (2026-10-05)
+
+### Hardware
+
+AMD Ryzen 5 3450U de notebook: **4 nucleos fisicos con SMT (8 hilos)**, 2,1 GHz
+base, 22 GB de RAM. Docker Desktop le da 8 CPUs a su VM, pero son 8 hilos de 4
+nucleos: las 5 replicas de "1 CPU", Traefik y el generador de carga compiten
+por 4 nucleos reales. El benchmark del profesor no dice en que hardware se
+midio.
+
+### Linea base de la Fase 2 (version 1.2.0 + Fase 1, k6 dentro de la red)
+
+| Prueba | Exito | Throughput (200) | p50 | p90 | p95 | Max |
+|---|---|---|---|---|---|---|
+| Spike, corrida 1 | 100 % | 9,30 req/s | 8,80 s | 11,94 s | 12,48 s | 13,30 s |
+| Spike, corrida 2 | 100 % | 9,25 req/s | 8,56 s | 11,17 s | 12,91 s | 14,09 s |
+| Carga fija 50 req/s (`carga_fija.js`) | **37,1 %** | **2,93 req/s** | 29,99 s | 30,00 s | 30,00 s | 30,09 s |
+
+El spike subio de 5,80 a 9,3 req/s respecto del cierre de la Fase 0; el cambio
+mas probable es la imagen en Python 3.14 (antes 3.13), queda para verificar.
+
+**La carga fija colapsa:** con ~9 req/s de capacidad, el servicio completa solo
+2,93 req/s efectivos y 298 requests vencen por timeout. Es el colapso por
+congestion: las replicas siguen procesando requests cuyo cliente ya se fue a
+los 30 s, y ese trabajo se tira mientras los requests nuevos esperan en cola.
+
+### CPU por request segun la concurrencia
+
+Una replica sola (1 CPU), 200 requests con k6, tiempo de CPU del proceso leido
+de `/proc`:
+
+| Requests concurrentes | CPU por request | Throughput | p50 |
+|---|---|---|---|
+| 1 | 291 ms | 3,07 req/s | 0,27 s |
+| 5 | 288 ms | 3,20 req/s | 1,39 s |
+| 20 | 314 ms | 2,85 req/s | 5,59 s |
+
+El costo por request **no depende de la concurrencia**: el hallazgo 2 de la
+Fase 0 estaba mal. Una replica procesa ~3 req/s; 5 replicas, ~15 req/s si
+tuvieran 5 nucleos libres, que esta PC no tiene.
+
+### Donde se va el CPU
+
+- Logs del servidor (`pdf_extraido`), un usuario: la extraccion dura 133 ms
+  (Scrum Guide), 191 ms (Lean), 240 ms (Scrum Manager) y 339 ms (Kanban),
+  **~226 ms en promedio de ~290 ms totales: el 78 %**.
+- Perfil con py-spy de una replica bajo carga (4.333 muestras en 30 s):
+
+| Donde | Muestras |
+|---|---|
+| PDFium cargando cada pagina (`get_page`) | 44 % |
+| PDFium armando el texto de la pagina (`get_textpage`) | 28 % |
+| Envoltorios de pypdfium2 (cerrar objetos, finalizadores con weakref) | ~10 % |
+| Nuestro Markdown y la medicion de alturas | ~10 % |
+| HTTP: recibir el body, FastAPI, JSON | ~5 % |
+
+**Conclusiones para los experimentos:**
+
+1. El costo esta en la extraccion misma, no en la infraestructura HTTP: no hay
+   que buscar el problema en uvicorn ni en Traefik.
+2. ~10 % se va en los objetos de pypdfium2 (cada pagina y cada pagina de texto
+   se envuelven en objetos Python con finalizadores). Usar la API cruda de
+   PDFium en el bucle de paginas puede ahorrarlo.
+3. En el modelo abierto el problema es el trabajo desperdiciado: hace falta
+   backpressure (rechazar rapido lo que no se va a poder atender a tiempo) y
+   dejar de procesar requests cuyo cliente ya se desconecto.
+4. Con 1 CPU por replica, mas procesos por replica (`WEB_CONCURRENCY`) o un
+   pool de procesos no agregan capacidad: a lo sumo separan el HTTP de la
+   extraccion. Hay que medirlo, pero no es donde esta la ganancia.
 
 ## Como reproducir
 
