@@ -133,3 +133,47 @@ class TestTurns:
 
         run(scenario())
         assert gate.service_seconds == pytest.approx(2.0)  # 0,5 * 1 + 0,5 * 3
+
+
+class TestUsefulLife:
+    """A request that already waited longer than the maximum is not processed."""
+
+    def test_request_that_waited_too_long_is_rejected_at_its_turn(self):
+        now = [0.0]
+        gate = AdmissionGate(
+            max_wait_seconds=10.0,
+            initial_service_seconds=0.3,
+            clock=lambda: now[0],
+        )
+        calls = 0
+
+        async def work():
+            nonlocal calls
+            calls += 1
+
+        async def scenario():
+            with gate.admit() as ticket:
+                now[0] += 11.0  # espero su turno mas que el maximo
+                await ticket.run(work, connected)
+
+        with pytest.raises(ServiceOverloadedError):
+            run(scenario())
+        assert calls == 0
+
+    def test_request_within_its_useful_life_is_processed(self):
+        now = [0.0]
+        gate = AdmissionGate(
+            max_wait_seconds=10.0,
+            initial_service_seconds=0.3,
+            clock=lambda: now[0],
+        )
+
+        async def work():
+            return "ok"
+
+        async def scenario():
+            with gate.admit() as ticket:
+                now[0] += 9.0
+                return await ticket.run(work, connected)
+
+        assert run(scenario()) == "ok"

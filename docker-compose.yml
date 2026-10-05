@@ -50,6 +50,8 @@ services:
       # por el mismo nucleo (a medir en la Fase 2 del plan).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       MAX_PDF_SIZE_BYTES: 10485760
+      # Backpressure: espera maxima con la que se admite un request (ver README).
+      EXTRACT_MAX_WAIT_SECONDS: ${EXTRACT_MAX_WAIT_SECONDS:-20}
     deploy:
       # Maximo que permite la consigna del TP.
       replicas: 5
