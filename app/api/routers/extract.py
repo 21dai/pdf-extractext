@@ -2,10 +2,13 @@
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.exceptions import RequestValidationError
+from python_multipart.exceptions import FormParserError
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
+from starlette.formparsers import MultiPartException, MultiPartParser
 
 from app.config import settings
+from app.core.exceptions import InvalidPdfError
 from app.core.validators import validate_pdf_size_limit
 from app.schemas import ExtractResponse
 from app.services import ExtractionService
@@ -38,9 +41,23 @@ async def _read_raw_body(request: Request, max_size_bytes: int) -> bytes:
 
 
 async def _read_multipart_file(request: Request, max_size_bytes: int) -> bytes:
-    """Read the `file` field of a multipart form."""
+    """Read the `file` field of a multipart form, keeping it in memory."""
     _reject_declared_size(request, max_size_bytes + MULTIPART_OVERHEAD_BYTES)
-    async with request.form(max_files=1) as form:
+    parser = MultiPartParser(
+        request.headers, request.stream(), max_files=1, max_fields=10
+    )
+    # Starlette pasa a un archivo temporal en disco cualquier parte de mas de
+    # 1 MB. Con el limite en el tamano maximo del PDF, el archivo queda en
+    # memoria: los mas grandes ya se rechazaron por Content-Length.
+    parser.spool_max_size = max_size_bytes
+    try:
+        form = await parser.parse()
+    except (MultiPartException, FormParserError) as exc:
+        # MultiPartException: limites de Starlette; FormParserError: body que
+        # no respeta el formato multipart (lo lanza python-multipart).
+        raise InvalidPdfError(f"Multipart invalido: {exc}") from exc
+
+    try:
         upload = form.get("file")
         if not isinstance(upload, UploadFile):
             raise RequestValidationError(
@@ -54,6 +71,8 @@ async def _read_multipart_file(request: Request, max_size_bytes: int) -> bytes:
                 ]
             )
         return await upload.read()
+    finally:
+        await form.close()
 
 
 def _reject_declared_size(request: Request, max_size_bytes: int) -> None:
