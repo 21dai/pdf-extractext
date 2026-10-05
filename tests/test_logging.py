@@ -6,7 +6,7 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
-from app.utils.logging import configure_logging
+from app.utils.structured_logging import configure_logging
 from tests.support.pdf import MINIMAL_PDF_BYTES
 
 

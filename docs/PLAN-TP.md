@@ -82,7 +82,7 @@ duplicados y escribe el texto en Mongo en cada request.
 - [ ] **F1-4** Consolidar la documentacion: hay 9 `.md` en la raiz y cuatro
   todavia mencionan `pypdf` (ARCHITECTURE, DEMO, EJEMPLOS,
   REVISION_ENUNCIADO). Dejar `README.md`, `ARCHITECTURE.md` y `docs/`.
-- [ ] **F1-5** Logs estructurados propios a stdout: tamano, paginas, ms de
+- [x] **F1-5** Logs estructurados propios a stdout: tamano, paginas, ms de
   extraccion y errores (Fowler: Monitoring; 12-Factor XI).
 - [x] **F1-6** Separar liveness (`/health`) de readiness (base de datos): las
   replicas de `/extract` no deben caer porque cae MongoDB.

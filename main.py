@@ -15,4 +15,7 @@ if __name__ == "__main__":
         port=settings.port,
         reload=settings.debug,
         workers=settings.web_concurrency,
+        # Sin la config de logging de uvicorn: sus logs pasan por el handler
+        # JSON que instala create_app (una linea JSON por evento en stdout).
+        log_config=None,
     )

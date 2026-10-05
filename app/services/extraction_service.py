@@ -1,7 +1,12 @@
 """Stateless extraction service behind POST /extract."""
 
+import logging
+import time
+
 from app.core.pdf_extraction import PdfExtraction, extract_pdf_markdown
 from app.core.validators import validate_pdf_signature, validate_pdf_size
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractionService:
@@ -30,4 +35,14 @@ class ExtractionService:
         """
         validate_pdf_size(content, self.max_pdf_size_bytes)
         validate_pdf_signature(content)
-        return extract_pdf_markdown(content)
+        started = time.perf_counter()
+        result = extract_pdf_markdown(content)
+        logger.info(
+            "pdf_extraido",
+            extra={
+                "bytes": len(content),
+                "page_count": result.page_count,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+            },
+        )
+        return result

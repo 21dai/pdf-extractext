@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -10,6 +11,9 @@ from app.api import document_router, extract_router
 from app.config import settings
 from app.utils.database import create_tables, get_db
 from app.utils.problem_details import register_problem_details_handlers
+from app.utils.structured_logging import configure_logging
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -22,11 +26,17 @@ async def lifespan(app: FastAPI):
     """
     if settings.documents_api_enabled:
         create_tables()
-    print(f"[OK] {settings.app_name} started successfully")
+    logger.info(
+        "servicio_iniciado",
+        extra={
+            "version": settings.app_version,
+            "documents_api_enabled": settings.documents_api_enabled,
+        },
+    )
 
     yield
 
-    print(f"[OK] {settings.app_name} shutdown")
+    logger.info("servicio_detenido")
 
 
 def create_app() -> FastAPI:
@@ -36,6 +46,7 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application
     """
+    configure_logging(settings.log_level)
     app = FastAPI(
         title=settings.app_name,
         description="API para registrar, validar y extraer texto de documentos PDF.",

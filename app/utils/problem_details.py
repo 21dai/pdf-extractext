@@ -1,5 +1,6 @@
 """RFC 9457 Problem Details helpers."""
 
+import logging
 from collections.abc import Sequence
 from http import HTTPStatus
 from typing import Any
@@ -15,6 +16,16 @@ from app.core.exceptions import (
     PdfTooLargeError,
     PdfUnreadableError,
 )
+
+logger = logging.getLogger(__name__)
+
+
+async def _rejected_pdf_response(
+    request: Request, exc: Exception, status_code: int
+) -> JSONResponse:
+    """Log why /extract rejected the PDF and build its Problem Details."""
+    logger.warning("pdf_rechazado", extra={"status": status_code, "detail": str(exc)})
+    return await _domain_exception_response(request, exc, status_code)
 
 
 async def _domain_exception_response(
@@ -106,18 +117,16 @@ def register_problem_details_handlers(app: FastAPI) -> None:
     # estos handlers aplican a /extract, que deja propagar los errores.
     @app.exception_handler(InvalidPdfError)
     async def invalid_pdf_handler(request: Request, exc: InvalidPdfError):
-        return await _domain_exception_response(
-            request, exc, status.HTTP_400_BAD_REQUEST
-        )
+        return await _rejected_pdf_response(request, exc, status.HTTP_400_BAD_REQUEST)
 
     @app.exception_handler(PdfTooLargeError)
     async def pdf_too_large_handler(request: Request, exc: PdfTooLargeError):
-        return await _domain_exception_response(
+        return await _rejected_pdf_response(
             request, exc, status.HTTP_413_CONTENT_TOO_LARGE
         )
 
     @app.exception_handler(PdfUnreadableError)
     async def pdf_unreadable_handler(request: Request, exc: PdfUnreadableError):
-        return await _domain_exception_response(
+        return await _rejected_pdf_response(
             request, exc, status.HTTP_422_UNPROCESSABLE_CONTENT
         )
