@@ -77,6 +77,22 @@ queda al terminar:
 k6 run --out "web-dashboard=export=tests/stress/results/spike.html" tests/stress/spike.js
 ```
 
+### Carga fija con k6 (el perfil de Vegeta, dentro de la red de Docker)
+
+`carga_fija.js` reproduce el perfil de Vegeta con el executor
+`constant-arrival-rate` de k6: 50 req/s durante 30 s, rotando los 4 PDFs en
+orden, timeout de 30 s, y latencias de todos los requests (un timeout cuenta
+30 s), como las calcula Vegeta. Sirve para medir el modelo abierto desde la red
+de Docker, porque Vegeta no tiene imagen oficial:
+
+```powershell
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/carga_fija.js
+```
+
+Variables: `BASE_URL`, `RATE` (50), `DURACION` (`30s`), `TIMEOUT` (`30s`),
+`MODO`. La parte comun de los dos scripts (PDFs, metricas y resumen) esta en
+`comun.js`.
+
 ## B. Carga fija con Vegeta (modelo abierto)
 
 Perfil del profesor: 50 req/s durante 30 s (1.500 solicitudes) rotando los 4
