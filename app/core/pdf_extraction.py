@@ -1,5 +1,6 @@
 """PDF text extraction."""
 
+import codecs
 import ctypes
 import threading
 from collections.abc import Callable
@@ -48,9 +49,7 @@ def extract_pdf(source: bytes) -> PdfExtraction:
     Raises:
         PdfUnreadableError: If PDFium cannot open or read the document.
     """
-    pages, page_count = _read_pages(
-        source, lambda textpage: textpage.get_text_range().strip()
-    )
+    pages, page_count = _read_pages(source, lambda textpage: textpage.text().strip())
     text = "\n\n".join(page for page in pages if page)
     return PdfExtraction(text=text, page_count=page_count)
 
@@ -73,44 +72,85 @@ def extract_pdf_text(source: bytes) -> str:
     return extract_pdf(source).text
 
 
+class _TextPage:
+    """Text of one PDF page, straight from the PDFium handle.
+
+    pypdfium2 envuelve cada pagina y cada pagina de texto en objetos Python con
+    finalizadores (weakref) para cerrarlas solas; con 90 paginas por PDF eso
+    era ~10 % del CPU en el perfil. Aca se usan los handles crudos y se cierran
+    a mano en `_read_pages`.
+    """
+
+    __slots__ = ("handle", "char_count")
+
+    def __init__(self, handle) -> None:
+        self.handle = handle
+        self.char_count = pdfium_c.FPDFText_CountChars(handle)
+        if self.char_count < 0:
+            raise RuntimeError("PDFium no pudo contar los caracteres de la pagina")
+
+    def text(self) -> str:
+        """Every char of the page, lines separated by CRLF as PDFium returns them."""
+        if self.char_count == 0:
+            return ""
+        # Pagina completa: PDFium escribe a lo sumo count chars mas el NUL final.
+        buffer = (ctypes.c_ushort * (self.char_count + 1))()
+        written = pdfium_c.FPDFText_GetText(self.handle, 0, self.char_count, buffer)
+        if written <= 1:
+            return ""
+        return codecs.decode(memoryview(buffer)[: written - 1], "utf-16-le", "ignore")
+
+
 def _read_pages(
-    source: bytes, read_page: Callable[[pdfium.PdfTextPage], PageResult]
+    source: bytes, read_page: Callable[[_TextPage], PageResult]
 ) -> tuple[list[PageResult], int]:
     """Open the PDF and apply `read_page` to the text of each page, under the lock."""
     try:
         with _pdfium_lock:
             document = pdfium.PdfDocument(source)
             try:
+                page_count = len(document)
                 results = []
-                for page in document:
-                    textpage = page.get_textpage()
-                    results.append(read_page(textpage))
-                    # Cerrar dentro del lock: si lo hace el recolector de
-                    # basura, PDFium se usaria desde otro hilo sin proteccion.
-                    textpage.close()
-                    page.close()
-                return results, len(document)
+                for index in range(page_count):
+                    results.append(_read_page(document.raw, index, read_page))
+                return results, page_count
             finally:
                 document.close()
     except Exception as exc:
         raise PdfUnreadableError(f"Error al extraer el texto: {str(exc)}") from exc
 
 
-def _page_lines(textpage: pdfium.PdfTextPage) -> list[TextLine]:
+def _read_page(
+    document, index: int, read_page: Callable[[_TextPage], PageResult]
+) -> PageResult:
+    """Load one page and its text, and close both even if reading fails."""
+    page = pdfium_c.FPDF_LoadPage(document, index)
+    if not page:
+        raise RuntimeError(f"PDFium no pudo cargar la pagina {index + 1}")
+    try:
+        textpage = pdfium_c.FPDFText_LoadPage(page)
+        if not textpage:
+            raise RuntimeError(f"PDFium no pudo leer el texto de la pagina {index + 1}")
+        try:
+            return read_page(_TextPage(textpage))
+        finally:
+            pdfium_c.FPDFText_ClosePage(textpage)
+    finally:
+        pdfium_c.FPDF_ClosePage(page)
+
+
+def _page_lines(textpage: _TextPage) -> list[TextLine]:
     """Split the text of a page in lines and measure the height of their letters."""
-    char_count = textpage.count_chars()
     lines = []
     offset = 0
-    for text in textpage.get_text_range().split(_LINE_BREAK):
-        height = _line_height(textpage, text, offset, char_count)
+    for text in textpage.text().split(_LINE_BREAK):
+        height = _line_height(textpage, text, offset)
         lines.append(TextLine(text=text, height=height))
         offset += len(text) + len(_LINE_BREAK)
     return lines
 
 
-def _line_height(
-    textpage: pdfium.PdfTextPage, text: str, offset: int, char_count: int
-) -> float:
+def _line_height(textpage: _TextPage, text: str, offset: int) -> float:
     """Height of the letter closest to the middle of the line.
 
     Se mide una letra del centro y no el primer caracter: las vinetas y las
@@ -119,7 +159,7 @@ def _line_height(
     con la mitad del costo extra.
     """
     middle = _letter_near_middle(text)
-    if middle is None or offset + middle >= char_count:
+    if middle is None or offset + middle >= textpage.char_count:
         return 0.0
     return _char_height(textpage, offset + middle)
 
@@ -134,8 +174,8 @@ def _letter_near_middle(text: str) -> int | None:
     return None
 
 
-def _char_height(textpage: pdfium.PdfTextPage, index: int) -> float:
+def _char_height(textpage: _TextPage, index: int) -> float:
     box = pdfium_c.FS_RECTF()
-    if not pdfium_c.FPDFText_GetLooseCharBox(textpage.raw, index, ctypes.byref(box)):
+    if not pdfium_c.FPDFText_GetLooseCharBox(textpage.handle, index, ctypes.byref(box)):
         return 0.0
     return abs(box.top - box.bottom)
