@@ -77,7 +77,7 @@ duplicados y escribe el texto en Mongo en cada request.
   body en memoria y rechazar por `Content-Length` antes de leerlo.
 - [x] **F1-2** Agregar CI (GitHub Actions: black, isort, flake8, mypy, pytest
   y build de la imagen). El orquestador ya lo tiene.
-- [ ] **F1-3** Sacar las credenciales de MongoDB del compose de
+- [x] **F1-3** Sacar las credenciales de MongoDB del compose de
   `infrastructure` a un `.env` (12-Factor III).
 - [x] **F1-4** Consolidar la documentacion: hay 9 `.md` en la raiz y cuatro
   todavia mencionan `pypdf` (ARCHITECTURE, DEMO, EJEMPLOS,
@@ -88,7 +88,7 @@ duplicados y escribe el texto en Mongo en cada request.
   replicas de `/extract` no deben caer porque cae MongoDB.
 - [x] **F1-7** Dockerfile multi-stage, sin `pip install uv` en la imagen final.
 - [x] **F1-8** Unificar la version de Python con el orquestador (3.13 vs 3.14).
-- [ ] **F1-9** Imagenes con tag versionado en `infrastructure`
+- [x] **F1-9** Imagenes con tag versionado en `infrastructure`
   (`image: pdf-extractext:${IMAGE_TAG}`, 12-Factor V).
 - [x] **F1-10** La limpieza de MongoDB como target del `Makefile` o script
   (12-Factor XII).
