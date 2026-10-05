@@ -90,7 +90,7 @@ duplicados y escribe el texto en Mongo en cada request.
 - [ ] **F1-8** Unificar la version de Python con el orquestador (3.13 vs 3.14).
 - [ ] **F1-9** Imagenes con tag versionado en `infrastructure`
   (`image: pdf-extractext:${IMAGE_TAG}`, 12-Factor V).
-- [ ] **F1-10** La limpieza de MongoDB como target del `Makefile` o script
+- [x] **F1-10** La limpieza de MongoDB como target del `Makefile` o script
   (12-Factor XII).
 
 ## Fase 2: optimizacion (proceso de investigacion)

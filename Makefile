@@ -1,4 +1,4 @@
-.PHONY: up down logs ps build api db help
+.PHONY: up down logs ps build api db limpiar-carga help
 
 # Paths de los compose files
 COMPOSE_API=docker/docker-compose.yml
@@ -27,6 +27,10 @@ ps:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) ps
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_DB) ps
 
+# Proceso de administracion (12-Factor XII): borra lo que dejan las pruebas de carga
+limpiar-carga:
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) exec api python -m app.admin.clear_documents --name-regex "^(carga vu|vegeta)"
+
 help:
 	@echo "Comandos disponibles:"
 	@echo "  make up     - Levantar todo el stack (db + api)"
@@ -35,3 +39,4 @@ help:
 	@echo "  make ps     - Ver estado de los contenedores"
 	@echo "  make api    - Levantar solo la API"
 	@echo "  make db     - Levantar solo MongoDB"
+	@echo "  make limpiar-carga - Borrar los documentos de las pruebas de carga"

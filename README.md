@@ -499,12 +499,23 @@ evaluacion con los numeros medidos esta en
 
 ### Limpieza
 
-Los documentos creados por las pruebas quedan en la base local con nombre
-`carga vu<N> iter<M>` o `vegeta ...`. Para borrarlos:
+Los documentos creados por las pruebas quedan en la base con nombre
+`carga vu<N> iter<M>` o `vegeta ...`. Se borran con un proceso de
+administracion que usa el mismo codigo y la misma configuracion que la API
+(12-Factor XII), asi no hace falta saber el nombre del contenedor de MongoDB
+ni sus credenciales:
 
 ```powershell
-docker exec docker-mongo-1 mongosh -u admin -p 9009 --authenticationDatabase admin --quiet pdf_extract --eval 'db.documents.deleteMany({ name: { $regex: \"^(carga vu|vegeta)\" } })'
+# Dentro del contenedor de la API (stack de docker/)
+docker compose -f docker/docker-compose.yml exec api python -m app.admin.clear_documents --name-regex "^(carga vu|vegeta)"
+
+# Fuera de Docker, contra la base del .env
+uv run python -m app.admin.clear_documents --name-regex "^(carga vu|vegeta)"
 ```
+
+`--all` borra todos los documentos y `--dry-run` solo cuenta cuantos se
+borrarian. Sin `--name-regex` ni `--all` el comando no hace nada: es
+destructivo y hay que decir que borrar. Con `make`: `make limpiar-carga`.
 
 ## Calidad de codigo
 
