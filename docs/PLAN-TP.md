@@ -84,7 +84,7 @@ duplicados y escribe el texto en Mongo en cada request.
   REVISION_ENUNCIADO). Dejar `README.md`, `ARCHITECTURE.md` y `docs/`.
 - [ ] **F1-5** Logs estructurados propios a stdout: tamano, paginas, ms de
   extraccion y errores (Fowler: Monitoring; 12-Factor XI).
-- [ ] **F1-6** Separar liveness (`/health`) de readiness (base de datos): las
+- [x] **F1-6** Separar liveness (`/health`) de readiness (base de datos): las
   replicas de `/extract` no deben caer porque cae MongoDB.
 - [ ] **F1-7** Dockerfile multi-stage, sin `pip install uv` en la imagen final.
 - [ ] **F1-8** Unificar la version de Python con el orquestador (3.13 vs 3.14).

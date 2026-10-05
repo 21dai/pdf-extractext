@@ -298,9 +298,13 @@ python main.py
 - API: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
-- Healthcheck: `http://localhost:8000/health`
+- Liveness: `http://localhost:8000/health`
+- Readiness: `http://localhost:8000/ready`
 
-Respuesta esperada del healthcheck:
+`/health` (liveness) solo dice que el proceso responde y no consulta MongoDB:
+es el que usa el healthcheck de Docker, para que una caida de la base no saque
+de servicio a las replicas de `POST /extract`, que no la usan. `/ready`
+(readiness) tambien verifica MongoDB y responde `503` si no esta disponible:
 
 ```json
 {
@@ -319,7 +323,8 @@ Respuesta esperada del healthcheck:
 - `PUT /api/v1/documents/{document_id}`
 - `DELETE /api/v1/documents/{document_id}`
 - `POST /api/v1/documents/{document_id}/extract`
-- `GET /health`
+- `GET /health` (liveness)
+- `GET /ready` (readiness)
 
 ## POST /extract (TP de carga y estres)
 

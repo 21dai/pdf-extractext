@@ -60,9 +60,9 @@ def create_app() -> FastAPI:
     app.include_router(extract_router)
     if settings.documents_api_enabled:
         app.include_router(document_router, prefix=settings.api_v1_prefix)
-        register_database_health(app)
+        register_database_readiness(app)
     else:
-        register_extraction_only_health(app)
+        register_extraction_only_readiness(app)
 
     @app.get("/", tags=["inicio"], summary="Ver informacion basica de la API")
     async def root() -> dict[str, Any]:
@@ -77,24 +77,34 @@ def create_app() -> FastAPI:
             info["database_name"] = settings.database_name
         return info
 
+    @app.get("/health", tags=["inicio"], summary="Verificar que el proceso responde")
+    def health() -> dict[str, str]:
+        """Liveness: el proceso esta vivo. No consulta dependencias.
+
+        Lo usa el healthcheck de Docker: si dependiera de MongoDB, una caida
+        de la base marcaria las replicas como enfermas y Traefik dejaria de
+        mandarles POST /extract, que no usa la base.
+        """
+        return {"status": "ok"}
+
     return app
 
 
-def register_extraction_only_health(app: FastAPI) -> None:
-    """Health check of the extractor: the process answers, no database involved."""
+def register_extraction_only_readiness(app: FastAPI) -> None:
+    """Readiness of the extractor: it has no dependencies to check."""
 
-    @app.get("/health", tags=["inicio"], summary="Verificar estado de la API")
-    def health():
-        """Verificar que la API este disponible."""
+    @app.get("/ready", tags=["inicio"], summary="Verificar que puede atender")
+    def ready() -> dict[str, str]:
+        """Readiness: sin base de datos, alcanza con que el proceso responda."""
         return {"status": "ok"}
 
 
-def register_database_health(app: FastAPI) -> None:
-    """Health check of the full service, which needs MongoDB to work."""
+def register_database_readiness(app: FastAPI) -> None:
+    """Readiness of the full service, which needs MongoDB for the CRUD."""
 
-    @app.get("/health", tags=["inicio"], summary="Verificar estado de la API")
-    def health(db: Any = Depends(get_db)):
-        """Verificar que la API y MongoDB esten disponibles."""
+    @app.get("/ready", tags=["inicio"], summary="Verificar que puede atender")
+    def ready(db: Any = Depends(get_db)) -> dict[str, str]:
+        """Readiness: la API y MongoDB estan disponibles."""
         try:
             db.command("ping")
         except Exception as exc:
