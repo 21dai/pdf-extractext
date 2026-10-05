@@ -157,7 +157,7 @@ Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproj
 
 ## Requisitos
 
-- Python 3.13+
+- Python 3.14+
 - `uv`
 - Docker Desktop
 - Docker Compose (V1 o V2)
