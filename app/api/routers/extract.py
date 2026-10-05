@@ -9,9 +9,11 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 
 from app.config import settings
 from app.core.exceptions import InvalidPdfError
+from app.core.pdf_extraction import PdfExtraction
 from app.core.validators import validate_pdf_size_limit
 from app.schemas import ExtractResponse
 from app.services import ExtractionService
+from app.services.admission import AdmissionGate
 
 router = APIRouter(tags=["extraccion"])
 
@@ -28,6 +30,11 @@ _PROBLEM = {"description": "Problem details (RFC 9457)"}
 def get_extraction_service() -> ExtractionService:
     """Dependency to obtain the extraction service."""
     return ExtractionService(max_pdf_size_bytes=settings.max_pdf_size_bytes)
+
+
+def get_admission_gate(request: Request) -> AdmissionGate:
+    """Dependency to obtain the admission gate of this process."""
+    return request.app.state.admission_gate
 
 
 async def _read_raw_body(request: Request, max_size_bytes: int) -> bytes:
@@ -87,7 +94,7 @@ def _reject_declared_size(request: Request, max_size_bytes: int) -> None:
     response_model=ExtractResponse,
     status_code=status.HTTP_200_OK,
     summary="Extraer el texto de un PDF sin guardarlo",
-    responses={400: _PROBLEM, 413: _PROBLEM, 422: _PROBLEM},
+    responses={400: _PROBLEM, 413: _PROBLEM, 422: _PROBLEM, 503: _PROBLEM},
     openapi_extra={
         "requestBody": {
             "required": True,
@@ -113,18 +120,27 @@ def _reject_declared_size(request: Request, max_size_bytes: int) -> None:
 async def extract(
     request: Request,
     service: ExtractionService = Depends(get_extraction_service),
+    gate: AdmissionGate = Depends(get_admission_gate),
 ) -> ExtractResponse:
     """Extract the content and page count of a PDF.
 
     Acepta el PDF como body crudo (`application/pdf`, como los scripts de
     carga del TP) o como campo `file` de un multipart. No persiste nada: el
     mismo PDF se puede enviar las veces que haga falta.
-    """
-    content_type = request.headers.get("content-type", "")
-    if content_type.startswith("multipart/form-data"):
-        content = await _read_multipart_file(request, service.max_pdf_size_bytes)
-    else:
-        content = await _read_raw_body(request, service.max_pdf_size_bytes)
 
-    result = await run_in_threadpool(service.extract, content)
+    Si la replica ya tiene mas trabajo del que puede terminar a tiempo,
+    responde 503 con Retry-After antes de leer el PDF (backpressure).
+    """
+    with gate.admit() as ticket:
+        content_type = request.headers.get("content-type", "")
+        if content_type.startswith("multipart/form-data"):
+            content = await _read_multipart_file(request, service.max_pdf_size_bytes)
+        else:
+            content = await _read_raw_body(request, service.max_pdf_size_bytes)
+
+        async def work() -> PdfExtraction:
+            return await run_in_threadpool(service.extract, content)
+
+        # El body ya se leyo entero: consultar la desconexion no pierde datos.
+        result = await ticket.run(work, request.is_disconnected)
     return ExtractResponse(content=result.text, page_count=result.page_count)

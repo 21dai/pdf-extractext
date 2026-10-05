@@ -9,11 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import document_router, extract_router
 from app.config import settings
+from app.services.admission import AdmissionGate
 from app.utils.database import create_tables, get_db
 from app.utils.problem_details import register_problem_details_handlers
 from app.utils.structured_logging import configure_logging
 
 logger = logging.getLogger(__name__)
+
+# Tiempo de servicio supuesto hasta medir: el promedio de los PDFs de prueba.
+INITIAL_SERVICE_SECONDS = 0.3
 
 
 @asynccontextmanager
@@ -66,6 +70,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Una compuerta por proceso: cada uno extrae un PDF por vez (PDFium).
+    app.state.admission_gate = AdmissionGate(
+        max_wait_seconds=settings.extract_max_wait_seconds,
+        initial_service_seconds=INITIAL_SERVICE_SECONDS,
+    )
     register_problem_details_handlers(app)
     # Contrato del TP: la ruta es /extract, sin el prefijo versionado.
     app.include_router(extract_router)

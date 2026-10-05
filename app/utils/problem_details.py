@@ -7,14 +7,16 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.exceptions import (
     CannotReprocessError,
+    ClientDisconnectedError,
     DocumentNotFoundError,
     InvalidPdfError,
     PdfTooLargeError,
     PdfUnreadableError,
+    ServiceOverloadedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -130,3 +132,23 @@ def register_problem_details_handlers(app: FastAPI) -> None:
         return await _rejected_pdf_response(
             request, exc, status.HTTP_422_UNPROCESSABLE_CONTENT
         )
+
+    @app.exception_handler(ServiceOverloadedError)
+    async def service_overloaded_handler(request: Request, exc: ServiceOverloadedError):
+        logger.warning(
+            "servicio_saturado", extra={"retry_after": exc.retry_after_seconds}
+        )
+        response = await _domain_exception_response(
+            request, exc, status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        response.headers["Retry-After"] = str(exc.retry_after_seconds)
+        return response
+
+    @app.exception_handler(ClientDisconnectedError)
+    async def client_disconnected_handler(
+        request: Request, exc: ClientDisconnectedError
+    ):
+        # Nadie va a leer la respuesta: 499 (Client Closed Request, convencion
+        # de nginx) deja el motivo claro en el access log.
+        logger.info("cliente_desconectado")
+        return Response(status_code=499)
