@@ -1,5 +1,6 @@
 """Tests for POST /extract, the stateless extraction contract of the TP."""
 
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -101,6 +102,38 @@ class TestExtractIsStateless:
         assert client.get("/api/v1/documents").json() == []
 
 
+class TestExtractKeepsUploadsInMemory:
+    """Pista 1 de la consigna: leer el PDF sin volcarlo a disco."""
+
+    @pytest.fixture
+    def disk_forbidden(self, monkeypatch: pytest.MonkeyPatch):
+        """Fail if an upload is moved from memory to a temporary file on disk."""
+
+        def rollover(self):
+            raise AssertionError("el upload se escribio en un archivo temporal")
+
+        monkeypatch.setattr(tempfile.SpooledTemporaryFile, "rollover", rollover)
+
+    @pytest.mark.usefixtures("disk_forbidden")
+    def test_multipart_pdf_bigger_than_one_megabyte_stays_in_memory(
+        self, client: TestClient
+    ):
+        source = STRESS_PDFS / "scrum_manager_historias_usuario.pdf"  # 3,8 MB
+
+        response = post_multipart(client, source.read_bytes())
+
+        assert response.status_code == 200
+        assert response.json()["page_count"] == 62
+
+    @pytest.mark.usefixtures("disk_forbidden")
+    def test_raw_pdf_bigger_than_one_megabyte_stays_in_memory(self, client: TestClient):
+        source = STRESS_PDFS / "Essential-Kanban-Condensed-Spanish.pdf"  # 8,9 MB
+
+        response = post_raw(client, source.read_bytes())
+
+        assert response.status_code == 200
+
+
 class TestExtractRejections:
     """Invalid input is rejected with RFC 9457 problem details."""
 
@@ -114,6 +147,15 @@ class TestExtractRejections:
 
     def test_empty_body_returns_400(self, client: TestClient):
         self.assert_problem(post_raw(client, b""), 400)
+
+    def test_malformed_multipart_returns_400(self, client: TestClient):
+        response = client.post(
+            "/extract",
+            content=b"esto no es un multipart",
+            headers={"Content-Type": "multipart/form-data; boundary=limite"},
+        )
+
+        self.assert_problem(response, 400)
 
     def test_multipart_without_file_field_returns_422(self, client: TestClient):
         response = client.post(
