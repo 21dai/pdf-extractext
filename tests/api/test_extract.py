@@ -182,3 +182,40 @@ class TestExtractRejections:
         corrupt = b"%PDF-1.4\n" + b"\x00basura que no es un PDF valido" * 20
 
         self.assert_problem(post_raw(client, corrupt), 422)
+
+
+class TestExtractBackpressure:
+    """Overload is rejected at once with 503, instead of queueing until timeout."""
+
+    @pytest.fixture
+    def saturated_client(self, client: TestClient):
+        """Client whose replica already has more work queued than it accepts."""
+        gate = client.app.state.admission_gate
+        busy = [gate.admit()]
+        gate.service_seconds = (
+            gate.max_wait_seconds * 2
+        )  # el siguiente esperaria de mas
+        yield client
+        for ticket in busy:
+            ticket.release()
+
+    def test_overloaded_replica_returns_503_with_retry_after(self, saturated_client):
+        response = post_raw(saturated_client, MINIMAL_PDF_BYTES)
+
+        assert response.status_code == 503
+        assert response.headers["content-type"] == "application/problem+json"
+        assert int(response.headers["retry-after"]) >= 1
+
+    def test_rejected_requests_do_not_keep_a_place_in_the_queue(self, saturated_client):
+        gate = saturated_client.app.state.admission_gate
+        pending_before = gate.pending
+
+        post_raw(saturated_client, MINIMAL_PDF_BYTES)
+
+        assert gate.pending == pending_before
+
+    def test_finished_requests_free_their_place(self, client: TestClient):
+        post_raw(client, MINIMAL_PDF_BYTES)
+        post_raw(client, b"no es un PDF")
+
+        assert client.app.state.admission_gate.pending == 0
