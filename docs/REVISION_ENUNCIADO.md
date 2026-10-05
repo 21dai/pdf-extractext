@@ -26,7 +26,7 @@ Estado: `cumplido`
 
 Como se resuelve:
 
-- el service usa `pypdf`
+- el service usa `pypdfium2` (PDFium, el motor de Chrome)
 - la extraccion se hace durante el alta
 - el resultado se guarda en `extracted_text`
 
@@ -94,7 +94,9 @@ Como se resuelve:
 - el checksum
 - y la extraccion
 
-se realizan en memoria a partir de los bytes del upload.
+se realizan en memoria a partir de los bytes del upload. En `POST /extract`
+tambien el multipart queda en memoria (Starlette guarda en disco las partes de
+mas de 1 MB, y eso se desactivo), y un test falla si un upload pasa a disco.
 
 ## 9. Python como lenguaje
 
@@ -115,16 +117,15 @@ Como se resuelve:
 
 ## 12. TDD
 
-Estado: `cumplido de forma razonable`
+Estado: `cumplido`
 
 Como se resuelve:
 
-- hay suite automatizada con `pytest`
-- los tests cubren alta, validaciones, duplicados, CRUD y salud de la API
-
-Resultado esperado actual:
-
-- `16 passed`
+- hay suite automatizada con `pytest` que corre en CI en cada push
+- los tests cubren alta, validaciones, duplicados, CRUD, `/extract`, Markdown,
+  liveness/readiness, logs y el proceso de administracion
+- las funcionalidades nuevas muestran el ciclo en el historial: un commit con
+  los tests en rojo (`test: ... (rojo)`) y despues el que los pone en verde
 
 ## 13. Uso de GitHub Project
 
@@ -144,7 +145,8 @@ Argumentos:
 - `KISS`: flujo principal sencillo
 - `DRY`: validacion y checksum centralizados en el service
 - `SOLID`: separacion en router, service y repository
-- `12 Factor`: configuracion por variables de entorno
+- `12 Factor`: configuracion por variables de entorno, procesos sin estado en
+  `/extract`, logs a stdout y procesos de administracion con el mismo codigo
 
 ## Conclusiones para defender en clase
 
@@ -166,3 +168,9 @@ Eso significa que:
 - PDFs escaneados o con imagenes: pueden devolver `extracted_text` vacio
 
 Eso no invalida el flujo principal del trabajo, pero conviene explicarlo si aparece en la demo.
+
+## Trabajo practico de carga y estres
+
+El TP posterior (endpoint `POST /extract`, 5 replicas, pruebas con k6 y
+Vegeta) se sigue en [PLAN-TP.md](PLAN-TP.md) y sus mediciones en
+[INFORME-TP.md](INFORME-TP.md).

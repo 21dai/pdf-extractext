@@ -5,8 +5,13 @@
 El proyecto sigue una arquitectura de 3 capas con influencia parcial de Hexagonal:
 
 ```text
-Router -> Service -> Repository -> MongoDB
+CRUD:            Router -> DocumentService   -> Repository -> MongoDB
+POST /extract:   Router -> ExtractionService -> app/core (PDFium + Markdown)
 ```
+
+El CRUD registra documentos y los guarda en MongoDB. `POST /extract` es el
+endpoint del TP de carga: valida y extrae sin repositorio, sin checksum y sin
+escribir nada, asi sus replicas no comparten estado.
 
 > Clasificacion honesta: **no es Clean Architecture ni Onion Architecture**.
 > Es una arquitectura en 3 capas clasica, con una influencia parcial del estilo
@@ -26,9 +31,11 @@ Responsabilidades:
 - transformar errores de negocio en respuestas HTTP
 - devolver respuestas JSON
 
-Archivo principal:
+Archivos principales:
 
-- `app/api/routers/document.py`
+- `app/api/routers/document.py`: CRUD de documentos
+- `app/api/routers/extract.py`: `POST /extract`, lee el PDF crudo o multipart en
+  memoria y rechaza por `Content-Length` antes de leer si supera el limite
 
 ## 2. Capa de logica de negocio
 
@@ -41,12 +48,28 @@ Responsabilidades:
 - controlar tamano maximo
 - calcular checksum
 - evitar duplicados
-- extraer texto con `pypdf`
+- pedir la extraccion al nucleo (`app/core/pdf_extraction.py`)
 - definir el flujo de actualizacion y borrado
 
-Archivo principal:
+Archivos principales:
 
-- `app/services/document_service.py`
+- `app/services/document_service.py`: alta, consulta, actualizacion y borrado
+- `app/services/extraction_service.py`: valida y extrae para `POST /extract`, sin
+  persistir; registra cada extraccion en el log (bytes, paginas, ms)
+
+## Nucleo
+
+Ubicacion: `app/core/`
+
+Reglas puras, sin FastAPI ni MongoDB, testeables sin levantar nada:
+
+- `validators.py`: nombre, extension, firma `%PDF-` y tamano
+- `exceptions.py`: errores de dominio; `/extract` los traduce a 400, 413 y 422
+- `pdf_extraction.py`: texto y cantidad de paginas con `pypdfium2` (PDFium, el
+  motor de Chrome). PDFium no es thread-safe: se serializa con un lock por
+  proceso, y el paralelismo viene de los procesos de uvicorn y las replicas
+- `markdown.py`: convierte las lineas de cada pagina a Markdown; los titulos
+  salen de la altura de las letras comparada con la del cuerpo
 
 ## 3. Capa de acceso a datos
 
@@ -124,24 +147,48 @@ Indices principales:
 
 Para documentos nuevos, la extraccion ya se realiza en el alta.
 
-El endpoint `/extract`:
+`POST /api/v1/documents/{id}/extract`:
 
 - devuelve el texto ya almacenado si el documento ya fue procesado
 - conserva compatibilidad con documentos viejos que pudieran requerir reprocesamiento
+
+`POST /extract` (sin estado) es otro flujo: recibe el PDF, lo valida, devuelve
+`{"content": <Markdown>, "page_count": N}` y no guarda nada.
+
+## Modos de despliegue
+
+- **Servicio completo** (`DOCUMENTS_API_ENABLED=true`, el default): CRUD +
+  `POST /extract`, necesita MongoDB. Es el que usa el repo `infrastructure`.
+- **Solo extractor** (`DOCUMENTS_API_ENABLED=false`): solo `POST /extract`, no
+  crea indices ni se conecta a MongoDB. Es el de las 5 replicas del TP
+  (`docker-compose.yml` de la raiz).
+
+## Operacion
+
+- `GET /health` (liveness): el proceso responde; no consulta dependencias. Lo
+  usan los healthchecks de Docker, asi una caida de MongoDB no saca de servicio
+  a las replicas de `POST /extract`.
+- `GET /ready` (readiness): ademas verifica MongoDB (503 si no responde).
+- Logs: una linea JSON por evento en stdout, incluidos los de uvicorn
+  (`app/utils/structured_logging.py`, nivel por `LOG_LEVEL`).
+- Administracion: `python -m app.admin.clear_documents` borra documentos con el
+  mismo codigo y la misma configuracion que la API.
 
 ## Principios aplicados
 
 - KISS: el flujo principal esta concentrado en un solo service
 - DRY: el checksum y la validacion se centralizan
 - SOLID: cada capa tiene una responsabilidad clara
-- 12 Factor: la configuracion se maneja por variables de entorno
+- 12 Factor: configuracion por variables de entorno (III), procesos sin estado
+  en `/extract` (VI), concurrencia por procesos y replicas (VIII), logs a stdout
+  (XI) y procesos de administracion con el mismo codigo (XII)
 
 ## Dependencias relevantes
 
 - FastAPI
 - Pydantic
 - PyMongo
-- pypdf
+- pypdfium2
 - pytest
 - mongomock
 

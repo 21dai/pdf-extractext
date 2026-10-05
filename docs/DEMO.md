@@ -56,11 +56,12 @@ Abrir en el navegador:
 
 Endpoint:
 
-- `GET /health`
+- `GET /ready`
 
 Que decir:
 
 - "Este endpoint confirma que la API esta corriendo y que MongoDB esta conectado."
+- "`/health` solo dice que el proceso responde: lo usa Docker, y no depende de la base."
 
 Esperado:
 
@@ -159,10 +160,24 @@ Que decir:
 
 - "Eso no significa que la API falle."
 - "Significa que el PDF no tenia texto digital extraible."
-- "La extraccion actual usa `pypdf` y no implementa OCR."
+- "La extraccion usa `pypdfium2` y no implementa OCR."
 
 ## Cierre sugerido
 
 Frase corta para cerrar:
 
 > La API ya cumple el flujo principal pedido por el trabajo: recibe PDFs reales, valida formato y tamano, evita duplicados por checksum, extrae texto en memoria y persiste los resultados en una base no relacional.
+
+## Demo del TP de carga
+
+1. `docker compose up --build -d` en la raiz: Traefik + 5 replicas de
+   `POST /extract`. Mostrar el dashboard de Traefik en
+   `http://localhost:8080/dashboard/` con las 5 replicas.
+2. Mandar un PDF y mostrar el Markdown y el `page_count`:
+
+```powershell
+curl.exe -X POST http://127.0.0.1/extract -H "Content-Type: application/pdf" --data-binary "@tests/stress/pdfs/2020-Scrum-Guide-Spanish-Latin-South-American.pdf"
+```
+
+3. Correr el spike del profesor y mostrar la tabla por PDF y la comparacion
+   con su benchmark (ver [tests/stress](../tests/stress/README.md)).

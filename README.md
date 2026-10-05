@@ -549,13 +549,12 @@ Convenciones vigentes:
 
 ## Documentacion util
 
-- `START_HERE.md`: punto de entrada rapido.
-- `QUICKSTART.md`: arranque en pocos minutos.
-- `DEMO.md`: guion sugerido para mostrar en clase.
-- `REVISION_ENUNCIADO.md`: chequeo punto por punto contra el TP.
-- `ARCHITECTURE.md`: resumen de arquitectura actual.
-- `EJEMPLOS.md`: ejemplos de requests y respuestas.
-- `VISUAL_GUIDE.md`: vista visual del flujo principal.
+- `ARCHITECTURE.md`: capas, nucleo, modos de despliegue y operacion.
+- `docs/PLAN-TP.md`: plan del TP de carga y estres.
+- `docs/INFORME-TP.md`: mediciones y decisiones del TP.
+- `docs/REVISION_ENUNCIADO.md`: chequeo punto por punto contra el enunciado.
+- `docs/DEMO.md`: guion para mostrar la API y el TP en clase.
+- `tests/stress/README.md`: como correr las pruebas de carga del TP.
 
 ## Limitacion conocida
 

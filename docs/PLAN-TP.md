@@ -79,7 +79,7 @@ duplicados y escribe el texto en Mongo en cada request.
   y build de la imagen). El orquestador ya lo tiene.
 - [ ] **F1-3** Sacar las credenciales de MongoDB del compose de
   `infrastructure` a un `.env` (12-Factor III).
-- [ ] **F1-4** Consolidar la documentacion: hay 9 `.md` en la raiz y cuatro
+- [x] **F1-4** Consolidar la documentacion: hay 9 `.md` en la raiz y cuatro
   todavia mencionan `pypdf` (ARCHITECTURE, DEMO, EJEMPLOS,
   REVISION_ENUNCIADO). Dejar `README.md`, `ARCHITECTURE.md` y `docs/`.
 - [x] **F1-5** Logs estructurados propios a stdout: tamano, paginas, ms de
