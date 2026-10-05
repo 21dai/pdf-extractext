@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # Backpressure de POST /extract: espera estimada maxima con la que se
     # admite un request. Por encima se responde 503 al instante. Tiene que
     # quedar por debajo del timeout de los clientes (30 s en el TP).
-    extract_max_wait_seconds: float = 20.0
+    extract_max_wait_seconds: float = 28.0
 
     # MongoDB Auth
     root_username: str = ""
