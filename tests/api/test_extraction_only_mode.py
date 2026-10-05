@@ -55,3 +55,10 @@ def test_documents_api_is_not_exposed(extraction_only_client: TestClient):
 
 def test_documents_api_is_enabled_by_default():
     assert settings.documents_api_enabled is True
+
+
+def test_ready_does_not_depend_on_the_database(extraction_only_client: TestClient):
+    response = extraction_only_client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
