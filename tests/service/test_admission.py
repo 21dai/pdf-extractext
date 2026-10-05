@@ -35,15 +35,29 @@ class TestAdmission:
         for ticket in tickets:
             ticket.release()
 
-    def test_rejects_with_retry_after_when_the_wait_would_exceed_the_limit(self):
+    def test_admits_up_to_the_margin_over_the_maximum_wait(self):
+        """The estimate on arrival is approximate: it allows 1.5x the maximum.
+
+        El corte exacto lo hace el chequeo en el turno; al llegar solo se
+        rechaza lo que claramente no va a llegar.
+        """
         gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
-        tickets = [gate.admit() for _ in range(4)]  # el siguiente esperaria 1,2 s
+
+        tickets = [gate.admit() for _ in range(6)]  # el sexto estimaba 1,5 s
+
+        assert gate.pending == 6
+        for ticket in tickets:
+            ticket.release()
+
+    def test_rejects_with_retry_after_when_the_wait_would_exceed_the_margin(self):
+        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
+        tickets = [gate.admit() for _ in range(6)]  # el siguiente esperaria 1,8 s
 
         with pytest.raises(ServiceOverloadedError) as error:
             gate.admit()
 
-        assert error.value.retry_after_seconds == 2  # 1,2 s redondeado hacia arriba
-        assert gate.pending == 4
+        assert error.value.retry_after_seconds == 2  # 1,8 s redondeado hacia arriba
+        assert gate.pending == 6
         for ticket in tickets:
             ticket.release()
 
@@ -177,3 +191,26 @@ class TestUsefulLife:
                 return await ticket.run(work, connected)
 
         assert run(scenario()) == "ok"
+
+
+class TestServiceTimeEstimate:
+    def test_a_single_slow_extraction_barely_moves_the_estimate(self):
+        """By default the average weighs ~20 extractions, about a whole queue.
+
+        Con un promedio que pesaba ~5 muestras, un par de PDFs grandes seguidos
+        inflaba la estimacion y la compuerta llego a rechazar en el spike.
+        """
+        now = [0.0]
+        gate = AdmissionGate(
+            max_wait_seconds=10.0, initial_service_seconds=0.3, clock=lambda: now[0]
+        )
+
+        async def slow_work():
+            now[0] += 3.0
+
+        async def scenario():
+            with gate.admit() as ticket:
+                await ticket.run(slow_work, connected)
+
+        run(scenario())
+        assert gate.service_seconds == pytest.approx(0.3 + 0.05 * (3.0 - 0.3))
