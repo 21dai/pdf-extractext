@@ -8,8 +8,10 @@ gastado en respuestas que nadie lee, mientras los nuevos tambien vencen.
 La compuerta:
 
 1. Admite un request solo si su espera estimada (pendientes x tiempo de
-   servicio promedio) no supera el maximo; si no, lo rechaza al instante con
-   503 y Retry-After, antes de leer el PDF.
+   servicio promedio) no supera el maximo con un margen (ADMISSION_MARGIN);
+   si no, lo rechaza al instante con 503 y Retry-After, antes de leer el PDF.
+   Es una estimacion: el margen evita rechazar de mas cuando la CPU esta
+   cargada, y acota la memoria de los PDFs que esperan en cola.
 2. Corre una extraccion por vez: los admitidos esperan en un semaforo de
    asyncio (barato) en vez de bloquear un hilo cada uno contra el lock de
    PDFium. El event loop sigue atendiendo HTTP mientras se extrae.
@@ -30,6 +32,10 @@ from app.core.exceptions import ClientDisconnectedError, ServiceOverloadedError
 
 Result = TypeVar("Result")
 
+# Al llegar se admite hasta 1,5 veces la espera maxima: el corte exacto lo
+# hace el chequeo en el turno (ver Ticket.run).
+ADMISSION_MARGIN = 1.5
+
 
 class AdmissionGate:
     """Decide which requests enter, and run their work one at a time."""
@@ -38,7 +44,7 @@ class AdmissionGate:
         self,
         max_wait_seconds: float,
         initial_service_seconds: float,
-        smoothing: float = 0.2,
+        smoothing: float = 0.05,
         clock: Callable[[], float] = time.monotonic,
     ):
         """Initialize the gate.
@@ -47,7 +53,8 @@ class AdmissionGate:
             max_wait_seconds: Longest estimated wait a request is admitted with
             initial_service_seconds: Service time assumed until there are
                 measurements
-            smoothing: Weight of each new measurement in the moving average
+            smoothing: Weight of each new measurement in the moving average;
+                0.05 weighs ~20 extractions, about a whole queue
             clock: Monotonic clock, injectable for tests
         """
         self.max_wait_seconds = max_wait_seconds
@@ -61,10 +68,11 @@ class AdmissionGate:
         """Admit a request, or reject it if it would wait too long.
 
         Raises:
-            ServiceOverloadedError: If the estimated wait exceeds the maximum.
+            ServiceOverloadedError: If the estimated wait exceeds the maximum
+                with its margin.
         """
         estimated_wait = self.pending * self.service_seconds
-        if estimated_wait > self.max_wait_seconds:
+        if estimated_wait > self.max_wait_seconds * ADMISSION_MARGIN:
             raise self._overloaded(estimated_wait)
         self.pending += 1
         return Ticket(self, admitted_at=self._clock())
