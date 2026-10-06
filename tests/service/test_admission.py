@@ -206,6 +206,33 @@ class TestUsefulLife:
 
         assert run(scenario()) == "ok"
 
+    def test_request_that_would_finish_after_its_useful_life_is_rejected(self):
+        """The useful life covers the answer, not only the wait.
+
+        Con la maquina lenta, un request que empezo a los 27,9 s de 28 tardo
+        mas de 2 s en extraerse y Vegeta lo conto como timeout (30,004 s).
+        """
+        now = [0.0]
+        gate = make_gate(
+            max_wait_seconds=10.0,
+            initial_service_seconds=2.0,
+            clock=lambda: now[0],
+        )
+        calls = 0
+
+        async def work():
+            nonlocal calls
+            calls += 1
+
+        async def scenario():
+            with gate.admit() as ticket:
+                now[0] += 9.0  # 9 s de espera + 2 s de extraccion > 10 s
+                await ticket.run(work, connected)
+
+        with pytest.raises(ServiceOverloadedError):
+            run(scenario())
+        assert calls == 0
+
 
 class TestServiceTimeEstimate:
     def test_a_single_slow_extraction_barely_moves_the_estimate(self):
