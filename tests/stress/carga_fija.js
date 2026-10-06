@@ -6,8 +6,11 @@
 //   k6 run tests/stress/carga_fija.js
 //   k6 run -e RATE=25 tests/stress/carga_fija.js
 //
-// Sirve para medir el modelo abierto desde dentro de la red de Docker (Vegeta
-// no tiene imagen oficial). La entrega usa vegeta.ps1 / vegeta.sh.
+// Limitacion: cada VU de k6 carga los 4 PDFs (13,7 MB). Con requests que
+// esperan ~30 s hacen falta ~1.500 VUs a la vez y k6 no llega a crearlos:
+// descarta iteraciones (dropped_iterations). Aca se cuentan como fallas y
+// se avisa. Para la medicion de la carga fija usar Vegeta (vegeta.sh, o su
+// imagen de tests/stress/docker para correrlo dentro de la red de Docker).
 // Variables: BASE_URL, RATE, DURACION, TIMEOUT, MODO (crudo | multipart).
 
 import exec from "k6/execution";
@@ -74,14 +77,25 @@ export function handleSummary(data) {
     return { stdout: l.join("\n") + "\n" };
   }
 
+  // Iteraciones que k6 no llego a lanzar: para Vegeta serian requests
+  // enviados sin respuesta, asi que cuentan como fallas.
+  const descartadas = data.metrics.dropped_iterations
+    ? data.metrics.dropped_iterations.values.count
+    : 0;
   const enviados = e.values.passes + e.values.fails;
+  const programadas = enviados + descartadas;
+  const tasaExito = programadas ? e.values.passes / programadas : 0;
   const timeouts = data.metrics.codigo_0 ? data.metrics.codigo_0.values.count : 0;
   // Como el "throughput" de Vegeta: respuestas exitosas por segundo de prueba.
   const throughput = e.values.passes / duracion;
   l.push("");
   l.push(`  Respuestas por codigo HTTP:   ${lineaCodigos(data)}`);
   l.push(`  Throughput efectivo (200):    ${throughput.toFixed(2)} req/s`);
-  l.push(`  EXITO GLOBAL:                 ${pct(e.values.rate).trim()}   (${e.values.passes} de ${enviados} con 200 OK)`);
+  l.push(`  EXITO GLOBAL:                 ${pct(tasaExito).trim()}   (${e.values.passes} de ${programadas} programadas con 200 OK)`);
+  if (descartadas > 0) {
+    l.push(`  AVISO: k6 descarto ${descartadas} iteraciones por falta de VUs; se cuentan como fallas.`);
+    l.push("         Para comparar con el profesor usar Vegeta (ver tests/stress/README.md).");
+  }
   l.push("  Latencias de todos los requests, como Vegeta (un timeout cuenta su duracion).");
 
   const perfilDelProfesor = RATE === 50 && DURACION === "30s" && TIMEOUT === "30s";
@@ -89,7 +103,7 @@ export function handleSummary(data) {
   l.push(...encabezadoComparacion());
   l.push(filaComparacion("Throughput efectivo", throughput, PROFESOR.throughput, formato.rps, true));
   l.push(filaComparacion("Peticiones exitosas", e.values.passes, PROFESOR.exitosas, formato.num, true));
-  l.push(filaComparacion("Tasa de exito", e.values.rate * 100, PROFESOR.exito, formato.porc, true));
+  l.push(filaComparacion("Tasa de exito", tasaExito * 100, PROFESOR.exito, formato.porc, true));
   l.push(filaComparacion("Timeouts (codigo 0)", timeouts, PROFESOR.timeouts, formato.num, false));
   if (t) l.push(filaComparacion("Latencia p50", t.values.med / 1000, PROFESOR.p50, formato.s, false));
   if (!perfilDelProfesor) {

@@ -79,6 +79,10 @@ k6 run --out "web-dashboard=export=tests/stress/results/spike.html" tests/stress
 
 ### Carga fija con k6 (el perfil de Vegeta, dentro de la red de Docker)
 
+> **Limitacion:** con PDFs grandes k6 no llega a crear los ~1.500 usuarios
+> virtuales que hacen falta y descarta iteraciones. El script las cuenta como
+> fallas y avisa, pero para medir la carga fija conviene Vegeta (seccion B).
+
 `carga_fija.js` reproduce el perfil de Vegeta con el executor
 `constant-arrival-rate` de k6: 50 req/s durante 30 s, rotando los 4 PDFs en
 orden, timeout de 30 s, y latencias de todos los requests (un timeout cuenta
@@ -109,6 +113,15 @@ tests/stress/vegeta.sh
 Parametros: `-Url` (default `http://127.0.0.1/extract`), `-Rate`, `-Duration`,
 `-Timeout` y `-Name` en PowerShell; los mismos en orden en Bash. Usar
 `127.0.0.1` y no `localhost`: Vegeta en Windows no resuelve `localhost`.
+
+Dentro de la red de Docker (recomendado en Windows), con la imagen de
+`tests/stress/docker/vegeta.Dockerfile` (binario oficial de Vegeta 12.13.0,
+checksum verificado):
+
+```powershell
+docker build -t vegeta:12.13.0 -f tests/stress/docker/vegeta.Dockerfile tests/stress/docker
+docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}/tests/stress:/stress" vegeta:12.13.0 /stress/vegeta.sh http://traefik/extract
+```
 
 Los resultados quedan en `tests/stress/results/` (ignorado por git): `.bin`,
 `.json`, el grafico `.html` y el `targets.txt` generado.
