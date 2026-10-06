@@ -1,6 +1,6 @@
 # Informe del TP: Test de Carga, Estres y Optimizacion de Microservicio
 
-Microservicio `pdf-extractext`, version 1.3.0 (2026-10-06). Las secciones 1 a
+Microservicio `pdf-extractext`, version 1.3.1 (2026-10-06). Las secciones 1 a
 7 son el informe; el anexo es la bitacora con cada medicion en el orden en que
 se hizo. Las decisiones estan en [decisions/](decisions/README.md), el plan de
 trabajo en [PLAN-TP.md](PLAN-TP.md) y los scripts en
@@ -745,3 +745,22 @@ JSON de cada replica son la otra fuente (Fase 1).
 - El motor de extraccion esta detras de la interfaz `PdfExtractor` (TDD:
   `2033abd` en rojo, `e63074a` en verde): los intentos con otros motores de la
   Fase 2 se pueden repetir sin tocar el servicio ni el router.
+
+### Version 1.3.1: el tiempo util cubre la respuesta (2026-10-06)
+
+En una corrida de Vegeta con la notebook lenta aparecio **1 timeout**
+(30,004 s) y el SLO no se cumplio. La compuerta controlaba solo la espera: un
+request que empezaba a los 27,9 s de 28 tardaba mas de 2 s en extraerse y
+llegaba despues del timeout del cliente. Ahora, en el turno, se rechaza si lo
+que espero **mas una extraccion promedio** (el promedio que la compuerta ya
+aprende) supera el tiempo util (TDD: `99e3d08` en rojo, `c5c3851` en verde).
+
+Vegeta, dos rondas intercaladas:
+
+| Version | Exito | Timeouts | p50 |
+|---|---|---|---|
+| 1.3.0 | 15,7 / 21,9 % | **19** / 0 | 1,28 / 0,11 s |
+| 1.3.1 | 22,4 / 22,7 % | **0 / 0** | 0,10 / 0,12 s |
+
+El spike con la 1.3.1 sigue sin errores (11,42 req/s, p95 9,67 s, SLO
+cumplido): con esperas de ~10 s el chequeo nunca rechaza.
