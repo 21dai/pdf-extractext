@@ -29,7 +29,7 @@ for (const pdf of PDFS) {
 const tiempoTotal = new Trend("tiempo_por_documento", true);
 const exitoTotal = new Rate("exito_por_documento");
 // Contadores por codigo HTTP (k6 no muestra contadores con tags en el resumen).
-const CODIGOS = ["200", "400", "413", "422", "429", "503", "504", "0"];
+const CODIGOS = ["200", "400", "413", "422", "429", "502", "503", "504", "0"];
 const porCodigo = {};
 for (const c of CODIGOS) porCodigo[c] = new Counter(`codigo_${c}`);
 const otrosCodigos = new Counter("codigo_otros");
