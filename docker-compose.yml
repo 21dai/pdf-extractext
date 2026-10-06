@@ -52,6 +52,7 @@ services:
       MAX_PDF_SIZE_BYTES: 10485760
       # Backpressure: espera maxima con la que se admite un request (ver README).
       EXTRACT_MAX_WAIT_SECONDS: ${EXTRACT_MAX_WAIT_SECONDS:-28}
+      EXTRACT_MAX_PENDING: ${EXTRACT_MAX_PENDING:-60}
     deploy:
       # Maximo que permite la consigna del TP.
       replicas: 5
@@ -80,3 +81,6 @@ services:
       - "traefik.http.routers.extract-tls.entrypoints=websecure"
       - "traefik.http.routers.extract-tls.tls=true"
       - "traefik.http.services.extract.loadbalancer.server.port=8000"
+      # Estrategia de balanceo: wrr (round robin), p2c (de dos replicas al azar,
+      # la de menos requests en vuelo) o leasttime (la que responde mas rapido).
+      - "traefik.http.services.extract.loadbalancer.strategy=${LB_STRATEGY:-wrr}"
