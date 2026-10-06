@@ -5,7 +5,7 @@ import ctypes
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
@@ -70,6 +70,25 @@ def extract_pdf_markdown(source: bytes) -> PdfExtraction:
 def extract_pdf_text(source: bytes) -> str:
     """Extract only the plain text from PDF bytes (see `extract_pdf`)."""
     return extract_pdf(source).text
+
+
+class PdfExtractor(Protocol):
+    """Engine that turns PDF bytes into Markdown and a page count.
+
+    El servicio depende de esta interfaz y no de PDFium: otro motor se prueba
+    y se mide sin tocar el servicio ni el router.
+    """
+
+    def extract(self, source: bytes) -> PdfExtraction:
+        """Extract the content as Markdown, raising PdfUnreadableError if it fails."""
+        ...
+
+
+class PdfiumExtractor:
+    """Default engine: PDFium, the fastest of the ones measured in the TP."""
+
+    def extract(self, source: bytes) -> PdfExtraction:
+        return extract_pdf_markdown(source)
 
 
 class _TextPage:
