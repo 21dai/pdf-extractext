@@ -42,6 +42,10 @@ services:
       dockerfile: docker/Dockerfile
     image: pdf-extractext:${IMAGE_TAG:-1.3.0}
     restart: unless-stopped
+    # Ante SIGTERM, uvicorn deja de aceptar conexiones y termina lo que tiene
+    # en cola. Un request admitido espera hasta EXTRACT_MAX_WAIT_SECONDS, asi
+    # que se le da ese tiempo mas un margen antes de que Docker mande SIGKILL.
+    stop_grace_period: ${STOP_GRACE_PERIOD:-35s}
     environment:
       HOST: 0.0.0.0
       PORT: 8000
@@ -84,3 +88,10 @@ services:
       # Estrategia de balanceo: wrr (round robin), p2c (de dos replicas al azar,
       # la de menos requests en vuelo) o leasttime (la que responde mas rapido).
       - "traefik.http.services.extract.loadbalancer.strategy=${LB_STRATEGY:-wrr}"
+      # Si una replica se cae o se esta apagando, Traefik reintenta en otra.
+      # Es seguro porque /extract no tiene estado: procesar dos veces el mismo
+      # PDF no cambia nada (prueba de caos en docs/INFORME-TP.md).
+      - "traefik.http.middlewares.reintento.retry.attempts=3"
+      - "traefik.http.middlewares.reintento.retry.initialinterval=100ms"
+      - "traefik.http.routers.extract.middlewares=reintento"
+      - "traefik.http.routers.extract-tls.middlewares=reintento"
