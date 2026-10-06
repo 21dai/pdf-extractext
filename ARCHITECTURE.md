@@ -67,7 +67,10 @@ Reglas puras, sin FastAPI ni MongoDB, testeables sin levantar nada:
 - `exceptions.py`: errores de dominio; `/extract` los traduce a 400, 413 y 422
 - `pdf_extraction.py`: texto y cantidad de paginas con `pypdfium2` (PDFium, el
   motor de Chrome). PDFium no es thread-safe: se serializa con un lock por
-  proceso, y el paralelismo viene de los procesos de uvicorn y las replicas
+  proceso, y el paralelismo viene de los procesos de uvicorn y las replicas.
+  El motor esta detras de la interfaz `PdfExtractor` (`PdfiumExtractor` por
+  defecto): `ExtractionService` la recibe por constructor, asi otro motor se
+  prueba y se mide sin tocar el servicio ni el router
 - `markdown.py`: convierte las lineas de cada pagina a Markdown; los titulos
   salen de la altura de las letras comparada con la del cuerpo
 
@@ -155,6 +158,24 @@ Para documentos nuevos, la extraccion ya se realiza en el alta.
 `POST /extract` (sin estado) es otro flujo: recibe el PDF, lo valida, devuelve
 `{"content": <Markdown>, "page_count": N}` y no guarda nada.
 
+```mermaid
+flowchart LR
+    C[Cliente: k6 / Vegeta] -->|POST /extract| T[Traefik<br/>round robin + reintentos]
+    T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
+    subgraph Replica [dentro de cada replica]
+        G[AdmissionGate<br/>cola de 30, tiempo util 28 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
+    end
+    R --> G
+    T -.metricas.-> PR[Prometheus] --> GR[Grafana]
+```
+
+1. `AdmissionGate` admite el request si la cola de la replica tiene lugar; si
+   no, 503 con `Retry-After` antes de leer el PDF.
+2. Se lee el body en memoria (crudo o multipart) y se espera el turno: una
+   extraccion por vez por proceso.
+3. Si el cliente ya se fue o el request espero mas que su tiempo util, no se
+   procesa. Si no, `ExtractionService` valida y el motor extrae.
+
 ## Modos de despliegue
 
 - **Servicio completo** (`DOCUMENTS_API_ENABLED=true`, el default): CRUD +
@@ -173,6 +194,14 @@ Para documentos nuevos, la extraccion ya se realiza en el alta.
   (`app/utils/structured_logging.py`, nivel por `LOG_LEVEL`).
 - Administracion: `python -m app.admin.clear_documents` borra documentos con el
   mismo codigo y la misma configuracion que la API.
+- Apagado ordenado: ante SIGTERM uvicorn deja de aceptar conexiones y termina
+  lo que tiene en cola; Docker espera 35 s (`stop_grace_period`) antes de
+  matarlo. Mientras tanto Traefik reintenta en otra replica.
+- Caidas: `restart: unless-stopped` levanta la replica sola (~15 s hasta
+  healthy) y Traefik reintenta en otra los requests que no llegaron a
+  procesarse. Traefik es el punto unico de falla del stack del TP.
+- Metricas: perfil `monitoreo` del compose (Prometheus + Grafana con las
+  metricas de Traefik). Procedimientos en `docs/RUNBOOK.md`.
 
 ## Principios aplicados
 

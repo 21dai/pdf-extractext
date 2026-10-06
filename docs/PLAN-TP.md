@@ -126,15 +126,15 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 
 ### Fowler, production-readiness
 
-| Principio | Accion |
-|---|---|
-| Stability | F1-2 y un tag de git por version. Agregar `/extract` es MINOR. |
-| Reliability | F1-6 y apagado ordenado (terminar lo que se esta procesando ante SIGTERM). |
-| Scalability | Plan de capacidad escrito: req/s por CPU, por replica y con 5 replicas. |
-| Fault tolerance | Chaos test: `docker kill` de una replica durante el k6. Listar los puntos unicos de falla (Traefik, MongoDB). |
-| Performance | SLO escrito (p95, req/s, % de error) y cargado como `thresholds` de k6. |
-| Monitoring | F1-5. Opcional: Prometheus + Grafana con las metricas de Traefik. |
-| Documentation | F1-4, diagrama de arquitectura, runbook y ADRs. |
+| Principio | Accion | Estado |
+|---|---|---|
+| Stability | F1-2 y un tag de git por version. Agregar `/extract` es MINOR. | Hecho: tags `v1.0.0` a `v1.3.0` |
+| Reliability | F1-6 y apagado ordenado (terminar lo que se esta procesando ante SIGTERM). | Hecho: `stop_grace_period: 35s`, 0 requests perdidos en la prueba |
+| Scalability | Plan de capacidad escrito: req/s por CPU, por replica y con 5 replicas. | Hecho: informe, Fase 3 |
+| Fault tolerance | Chaos test: tirar una replica durante el k6. Listar los puntos unicos de falla (Traefik, MongoDB). | Hecho: `caos.sh`, reintentos de Traefik |
+| Performance | SLO escrito (p95, req/s, % de error) y cargado como `thresholds` de k6. | Hecho: `spike.js` y `vegeta.sh` |
+| Monitoring | F1-5. Opcional: Prometheus + Grafana con las metricas de Traefik. | Hecho: perfil `monitoreo` |
+| Documentation | F1-4, diagrama de arquitectura, runbook y ADRs. | Hecho, salvo los ADRs (F4-2) |
 
 ### 12-Factor
 
@@ -144,7 +144,7 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 | III Config | F1-3 |
 | V Build/release/run | F1-9 |
 | VI Procesos sin estado | F0-4 |
-| IX Disposability | F1-7, apagado ordenado, tiempo de arranque |
+| IX Disposability | F1-7, apagado ordenado (35 s de gracia), arranque en ~5 s |
 | X Paridad dev/prod | F1-8 |
 | XI Logs | F1-5 |
 | XII Procesos de administracion | F1-10 |
@@ -153,11 +153,11 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 
 - [x] **F3-1** `/extract` con el ciclo visible en el historial: commit del test
   en rojo, despues el verde, despues el refactor.
-- [ ] **F3-2** Tests de `/extract`: `200`, `400` no es PDF, `413` demasiado
+- [x] **F3-2** Tests de `/extract`: `200`, `400` no es PDF, `413` demasiado
   grande, `422` PDF ilegible, `503` saturado, body crudo y multipart.
 - [x] **F3-3** Tests del conversor a Markdown con archivos de referencia
   (PDF de fixture y su `.md` esperado).
-- [ ] **F3-4** Motor de extraccion detras de una interfaz, para poder cambiarlo
+- [x] **F3-4** Motor de extraccion detras de una interfaz, para poder cambiarlo
   y medir sin tocar el router.
 - [x] **F3-5** Errores de `/extract` en RFC 9457 (sucesor de 7807), como el resto del servicio.
 

@@ -429,6 +429,106 @@ esta disponible para correrlo aca). La comparacion por replica del
 experimento 5 es la mas justa que se puede hacer: con su nucleo propio, una
 replica rinde 5,5-6,4 req/s contra 5,07 del profesor.
 
+## Fase 3: principios (2026-10-06)
+
+### SLO
+
+Objetivos de nivel de servicio del stack del TP, cargados en los scripts para
+que una medicion diga sola si se cumplen:
+
+| Prueba | Objetivo | Donde se controla |
+|---|---|---|
+| Spike | al menos 99 % de los PDFs extraidos | `thresholds` de `spike.js` |
+| Spike | p95 de las respuestas 200 menor a 12 s | idem |
+| Spike | ninguna respuesta 200 cerca del timeout (max < 30 s) | idem |
+| Spike | throughput de al menos 8 req/s (depende del hardware, `SLO_RPS`) | idem |
+| Carga fija | ningun request vence por timeout: lo que no se atiende se rechaza al instante | `vegeta.sh` / `vegeta.ps1` |
+
+Si no se cumplen, k6 termina con codigo 99 y Vegeta con codigo 1. En la
+verificacion: spike con **15,34 req/s, 100 % de exito, p95 7,53 s y maximo
+8,29 s** (p90, p95 y maximo mejores que los del profesor) y Vegeta sin ningun
+timeout.
+
+### Tolerancia a fallos: prueba de caos
+
+`tests/stress/caos.sh` corre el spike y a los 15 s tira una replica. La caida
+se simula matando el proceso con `kill -9` desde fuera del contenedor: un
+`docker kill` cuenta como apagado manual y Docker no la reiniciaria.
+
+| Escenario | Respuestas | Exito | Replica healthy de nuevo |
+|---|---|---|---|
+| Caida, sin reintentos | 446 ok, 31 x 502, 4 x 503 | 92,7 % | 15 s |
+| Caida, sin reintentos | 431 ok, 27 x 502 | 94,1 % | 14 s |
+| Caida, con reintentos de Traefik | 414 ok, 19 x 502 | 95,6 % | 24 s |
+| Caida, con reintentos de Traefik | 442 ok, 18 x 502, 3 x 503 | 95,5 % | 14 s |
+| Apagado ordenado, 10 s de gracia | 408 ok | 100 % | 31 s |
+| Apagado ordenado, 10 s de gracia | 521 ok, 2 x 503 | 99,6 % | 17 s |
+| Apagado ordenado, 35 s de gracia | 464 ok | 100 % | 19 s |
+| Apagado ordenado, 35 s de gracia | 465 ok, 1 x 502, 1 x 503 | 99,6 % | 30 s |
+
+- **Caida**: los 502 son los requests que estaban en la cola de la replica
+  que murio; ese trabajo se pierde con el proceso. El middleware `retry` de
+  Traefik (3 intentos) reintenta en otra replica los que no llegaron a
+  procesarse y baja los 502 de ~29 a ~18. Es seguro porque `/extract` no tiene
+  estado: procesar dos veces el mismo PDF no cambia nada. Se adopto.
+- **Apagado ordenado** (SIGTERM, como en un deploy): uvicorn deja de aceptar
+  conexiones y termina su cola (9-12 s); Traefik manda lo nuevo a otra
+  replica. No se perdio ningun request. Con este spike 10 s de gracia
+  alcanzan, pero un request admitido puede esperar hasta 28 s: se fijo
+  `stop_grace_period: 35s` para que Docker no lo mate a mitad de camino.
+- Los 503 sueltos son las otras replicas absorbiendo la carga de la caida con
+  su cola llena: rechazo inmediato, no timeout.
+
+**Puntos unicos de falla**:
+
+| Componente | Efecto | Medido |
+|---|---|---|
+| Traefik (una instancia) | no responde nada | `kill -9`: 4,3 s sin servicio hasta que Docker lo reinicia |
+| El host de Docker | todo el stack | no se mide: requiere otra maquina |
+| MongoDB (solo en `infrastructure`) | el CRUD; `/extract` sigue funcionando porque `/health` no depende de la base | Fase 1 |
+
+### Apagado y arranque (12-Factor IX)
+
+- Arranque: ~5 s desde `docker run` hasta que `/health` responde (medido con
+  `docker exec`, que suma su propia demora). Una replica caida vuelve a estar
+  healthy en ~15 s, porque el healthcheck corre cada 5 s.
+- Apagado: ordenado ante SIGTERM, ver la prueba de caos.
+
+### Plan de capacidad
+
+Con los numeros de la Fase 2 (experimentos 5 y 6):
+
+| Magnitud | Valor |
+|---|---|
+| CPU por request (mezcla de los 4 PDFs) | 160-200 ms con nucleo propio; hasta 460 ms con nucleos compartidos |
+| Capacidad de una replica (1 CPU) | ~5-6 req/s |
+| 5 replicas con un nucleo libre cada una | ~25-30 req/s (proyeccion) |
+| 5 replicas en la notebook del grupo (4 nucleos) | 11-17 req/s medidos |
+| Memoria pico por replica | ~420 MiB bajo Vegeta (limite: 1 GB) |
+| Cola por replica | 30 requests, ~6-15 s de espera maxima |
+
+Capacidad = replicas x 1.000 / CPU por request (ms), mientras cada replica
+tenga su nucleo. Para mas carga hacen falta mas nucleos: agregar replicas en
+la misma maquina no suma (experimento 5) y la consigna limita a 5. Lo que
+supere la capacidad se rechaza con 503 en vez de vencer por timeout.
+
+### Monitoreo
+
+Perfil `monitoreo` del compose: Traefik expone metricas Prometheus, Prometheus
+las lee cada 5 s y Grafana muestra el dashboard "TP - POST /extract"
+(respuestas por codigo, latencia p50/p95, porcentaje de 503, conexiones y
+reintentos). Es opcional para no sacarle CPU a las replicas al medir. Los logs
+JSON de cada replica son la otra fuente (Fase 1).
+
+### Estabilidad, documentacion y codigo
+
+- Cada version tiene su tag de git (`v1.0.0` a `v1.3.0`) y su imagen Docker.
+- `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.
+- `ARCHITECTURE.md`: diagrama del stack del TP y flujo de `/extract`.
+- El motor de extraccion esta detras de la interfaz `PdfExtractor` (TDD:
+  `2033abd` en rojo, `e63074a` en verde): los intentos con otros motores de la
+  Fase 2 se pueden repetir sin tocar el servicio ni el router.
+
 ## Como reproducir
 
 ```powershell
@@ -439,4 +539,8 @@ docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}
 # Experimento 5: capacidad con N replicas (3 usuarios por replica)
 docker compose up -d --scale extract=1
 docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik -e VUS=3 /scripts/escala.js
+# Fase 3: prueba de caos (Git Bash) y monitoreo
+docker compose up -d
+bash tests/stress/caos.sh caida 15
+docker compose --profile monitoreo up -d
 ```

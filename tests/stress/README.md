@@ -139,6 +139,26 @@ docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scr
 Imprime una linea `RESULTADO ok=... rps=... p50=... p95=...`. `DUR` cambia la
 duracion (default `60s`).
 
+## D. Prueba de caos (`caos.sh`)
+
+Corre el spike y a los N segundos tira una replica. Desde Git Bash, con el
+stack levantado:
+
+```bash
+bash tests/stress/caos.sh caida 15   # el proceso muere de golpe (kill -9)
+bash tests/stress/caos.sh stop 15    # apagado ordenado (SIGTERM), como un deploy
+```
+
+Muestra el resumen del spike (con los 502 de la caida) y cuanto tardo la
+replica en volver a estar healthy.
+
+## SLO
+
+`spike.js` trae el SLO como `thresholds` de k6 (99 % de exito, p95 < 12 s,
+maximo < 30 s, al menos `SLO_RPS` req/s, 8 por defecto) y termina con codigo
+99 si no se cumple. `vegeta.sh` y `vegeta.ps1` terminan con codigo 1 si algun
+request vencio por timeout.
+
 ## Benchmark del profesor
 
 | Prueba | Resultado |

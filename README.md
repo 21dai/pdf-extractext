@@ -157,7 +157,7 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   `Retry-After`), `/ready`, logs JSON y el comando de limpieza de documentos.
   MINOR: configuraciones nuevas con valores por defecto, sin romper nada.
 
-Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`.
+Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`. Cada release tiene ademas su tag de git (`v1.0.0` ... `v1.3.0`): `git checkout vX.Y.Z` reconstruye exactamente esa version.
 
 ## Requisitos
 
@@ -373,7 +373,9 @@ docker compose up --build
 
 Queda en `http://127.0.0.1/extract` y en
 `https://extract.universidad.localhost/extract`; el dashboard de Traefik en
-`http://localhost:8080/dashboard/`. Usa los mismos puertos que el stack
+`http://localhost:8080/dashboard/`. Si una replica se cae o se apaga, Traefik
+reintenta en otra; con `docker compose --profile monitoreo up -d` se agregan
+Prometheus y Grafana (`http://localhost:3000`). Usa los mismos puertos que el stack
 completo del repo `infrastructure`: no levantar los dos a la vez. Las pruebas
 de carga del TP estan en [tests/stress](tests/stress/README.md), el plan en
 [docs/PLAN-TP.md](docs/PLAN-TP.md) y las mediciones en
@@ -567,6 +569,7 @@ Convenciones vigentes:
 - `docs/INFORME-TP.md`: mediciones y decisiones del TP.
 - `docs/REVISION_ENUNCIADO.md`: chequeo punto por punto contra el enunciado.
 - `docs/DEMO.md`: guion para mostrar la API y el TP en clase.
+- `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.
 - `tests/stress/README.md`: como correr las pruebas de carga del TP.
 
 ## Limitacion conocida
