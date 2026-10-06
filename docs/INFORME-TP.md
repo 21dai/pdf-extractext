@@ -192,9 +192,156 @@ tuvieran 5 nucleos libres, que esta PC no tiene.
    pool de procesos no agregan capacidad: a lo sumo separan el HTTP de la
    extraccion. Hay que medirlo, pero no es donde esta la ganancia.
 
+## Fase 2: experimentos
+
+### Como se mide
+
+La notebook cambia de frecuencia segun temperatura y energia (de 2,1 a 3,5 GHz):
+la misma imagen dio de 160 a 290 ms de CPU por request en distintos momentos,
+y el throughput del spike vario entre 6 y 12 req/s con el mismo codigo. Para
+que una comparacion valga:
+
+- Las configuraciones se miden **intercaladas** (A, B, C, A, B, C...) y cada
+  una al menos dos veces, asi el ruido afecta a todas por igual.
+- Los cambios de CPU puro se comparan **en el mismo proceso**: la version vieja
+  (sacada de git) y la nueva, alternadas 30 veces con los 4 PDFs.
+- El spike (modelo cerrado) se mide con k6 y la carga fija (modelo abierto) con
+  **Vegeta**, los dos dentro de la red de Docker (ver hallazgo 1).
+
+### Error de medicion corregido: la carga fija con k6
+
+Las primeras mediciones de la carga fija se hicieron con `carga_fija.js` (k6,
+executor de tasa constante). Daban porcentajes de exito inflados: cada usuario
+virtual de k6 carga los 4 PDFs (13,7 MB) y, con requests que esperan ~30 s,
+hacen falta ~1.500 a la vez. k6 no llega a crearlos y **descarta iteraciones
+sin contarlas**: en varias corridas mando entre 500 y 700 de los 1.500
+requests, y el porcentaje se calculaba sobre esos. Esas mediciones se
+descartaron. Desde entonces la carga fija se mide con Vegeta 12.13.0 en un
+contenedor (`tests/stress/docker/vegeta.Dockerfile`), y `carga_fija.js` cuenta
+las iteraciones descartadas como fallas y avisa.
+
+### Experimento 1: API cruda de PDFium (F2-8)
+
+El perfil mostraba ~10 % del CPU en los envoltorios de pypdfium2 (cada pagina
+y cada pagina de texto es un objeto Python con finalizadores). El bucle de
+paginas paso a usar los handles crudos (`FPDF_LoadPage`, `FPDFText_LoadPage`,
+`FPDFText_GetText`) y a cerrarlos a mano.
+
+| Version | CPU por PDF (mediana de 30) |
+|---|---|
+| pypdfium2 | 117,8 ms |
+| API cruda | 111,0 ms (**-5,8 %**, gana en 24 de 30 pares) |
+
+Salida identica byte a byte (texto y Markdown de los 4 PDFs). Menos que el 10 %
+del perfil: abrir y cerrar cada pagina hay que hacerlo igual; se ahorra solo
+el envoltorio.
+
+### Experimento 2: compuerta de admision (F2-1 y F2-3)
+
+`app/services/admission.py`, una por proceso:
+
+1. **Cola acotada**: admite hasta `EXTRACT_MAX_PENDING` requests; llena, 503
+   con `Retry-After` al instante, sin leer el PDF.
+2. **Una extraccion por vez** en un semaforo de asyncio: antes cada request
+   bloqueaba un hilo contra el lock de PDFium; ahora el event loop atiende HTTP
+   y la extraccion va aparte (pista 4 de la consigna).
+3. **Tiempo util**: si cuando le toca el turno el cliente ya se fue, o si
+   espero mas de `EXTRACT_MAX_WAIT_SECONDS` (28 s), no se procesa (pista 2).
+
+**Spike** (k6, 100 VUs, intercalado, 2 rondas):
+
+| Version | Throughput | p50 | p95 |
+|---|---|---|---|
+| Fase 1 | 10,09 / 10,52 req/s | 8,49 / 7,45 s | 10,83 / 11,21 s |
+| Compuerta | **11,80 / 12,25 req/s** | **6,82 / 6,66 s** | **9,39 / 9,06 s** |
+
++16 % de throughput con 100 % de exito. En el spike la compuerta nunca rechaza
+(unos 20 requests por replica): la mejora viene de no tener 20 hilos peleando
+por el lock de PDFium en cada replica.
+
+#### Como se eligio el criterio de admision
+
+La primera version estimaba la espera al llegar (pendientes x tiempo de
+servicio promedio) y rechazaba si superaba el maximo. Problemas encontrados:
+
+- Con un promedio que pesaba ~5 extracciones, un par de PDFs grandes seguidos
+  lo inflaba y llego a rechazar **1 request en el spike** (que tiene que dar
+  0 % de error).
+- Con Vegeta, la prueba terminaba a los ~45 s cuando el timeout permite
+  trabajar hasta los ~60 s: durante el ataque la CPU esta saturada (Vegeta y
+  Traefik mueven ~167 MB/s de PDFs) y cada extraccion tarda mas, pero esa cola
+  se vacia mucho mas rapido cuando el ataque termina. Una estimacion hecha en
+  el momento admite de menos.
+
+Por eso la cola paso a acotarse **por cantidad**, y el tiempo util lo controla
+el chequeo exacto en el turno. **Carga fija con Vegeta** (50 req/s, 30 s,
+timeout 30 s, 1.500 requests enviados), tres rondas intercaladas:
+
+| Criterio | Exito | Timeouts | p50 | Pico de memoria |
+|---|---|---|---|---|
+| Estimacion de espera | 20,7 / 23,1 / 25,5 % | 141 / 57 / 26 | 0,1-3,1 s | ~540 MiB |
+| **Cola de 30** | **21,5 / 25,8 / 24,0 %** | **0 / 0 / 0** | **~0,1 s** | **~390 MiB** |
+| Cola de 100 | 26,1 / 32,7 / **7,7 %** | 117 / 4 / **985** | hasta 30 s | ~600 MiB |
+
+Con 30, todo lo admitido se atiende antes de los 28 s. Con 100 la cola guarda
+mas trabajo del que entra en el tiempo util: en una corrida todo vencio
+esperando (colapso de una cola FIFO sobrecargada). El spike con cola de 30 sigue
+en 100 % de exito sin ningun 503.
+
+### Experimento 3: estrategia de balanceo de Traefik (F2-5)
+
+Spike con k6, dos rondas intercaladas:
+
+| Estrategia | Throughput | Errores |
+|---|---|---|
+| `wrr` (round robin) | 11,59 / 8,37 req/s | 0 / 1 (el 503 de la estimacion) |
+| `p2c` (de dos al azar, la de menos en vuelo) | 11,08 / 11,55 req/s | 0 / 0 |
+| `leasttime` (la que responde mas rapido) | 11,91 / 5,75 req/s | 0 / **1.172 rechazos** |
+
+`leasttime` se descarto: cuando hay rechazos, la replica que "responde mas
+rapido" es la que esta devolviendo 503, y le manda todavia mas trafico.
+Entre `wrr` y `p2c` la diferencia queda dentro del ruido; se mantiene `wrr`
+(configurable con `LB_STRATEGY`).
+
+### Experimento 4: dos procesos por replica (F2-2)
+
+Spike con `WEB_CONCURRENCY=2`: 11,02 / 11,32 / 11,61 req/s, igual que con 1
+proceso, y p95 peor (~12,2 s contra ~10 s). Con 1 CPU de limite, dos procesos
+se reparten el mismo nucleo; ademas cada uno tiene su cola, asi que duplica la
+memoria de PDFs en espera. Se mantiene 1 proceso por replica.
+
+### Descartados por medicion (F2-7)
+
+Serializar la respuesta cuesta 0,3-1,5 ms contra 150-300 ms de extraccion
+(menos del 1 %): orjson no justifica una dependencia nueva.
+
+### Estado al cierre de los experimentos
+
+| Prueba | Nosotros | Profesor |
+|---|---|---|
+| Spike, throughput | ~11-12 req/s | 25,35 req/s |
+| Spike, p50 / p95 | ~7 s / ~9,5 s | 1,88 s / 8,80 s |
+| Spike, errores | 0 % | 0 % |
+| Vegeta, exito | ~24 % | 66,53 % |
+| Vegeta, timeouts | **0** | 501 |
+| Vegeta, p50 | **~0,1 s** | 14,89 s |
+
+La capacidad bruta (req/s) sigue siendo la mitad. Lo que se gano es
+comportamiento bajo sobrecarga: ningun request vence por timeout, los rechazos
+son instantaneos y con `Retry-After`, la memoria esta acotada y no se gasta CPU
+en respuestas que nadie va a leer.
+
+**La comparacion absoluta no es justa todavia**: esta PC es una notebook de
+15 W con 4 nucleos para 5 replicas, Traefik y el generador de carga, y el
+benchmark del profesor no dice en que hardware se midio. La consigna pide
+superarlo "bajo las mismas restricciones de hardware": hay que correr su
+microservicio de referencia en esta misma maquina, o el nuestro en la suya.
+
 ## Como reproducir
 
 ```powershell
 docker compose up --build -d
 docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
+docker build -t vegeta:12.13.0 -f tests/stress/docker/vegeta.Dockerfile tests/stress/docker
+docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}/tests/stress:/stress" vegeta:12.13.0 /stress/vegeta.sh http://traefik/extract
 ```

@@ -99,22 +99,22 @@ Cada item es un experimento: se mide antes y despues con el spike de k6
 (100 VUs) y con Vegeta (50 req/s x 30 s), con los mismos 4 PDFs, anotando
 throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 
-- [ ] **F2-1** Pool de procesos separado del runtime HTTP
+- [x] **F2-1** Pool de procesos separado del runtime HTTP
   (`ProcessPoolExecutor`): pista 4 de la consigna.
-- [ ] **F2-2** Cantidad de procesos por replica con 1 CPU de limite (1, 2, 3).
-- [ ] **F2-3** Backpressure con fecha limite: cola acotada y `503` con
+- [x] **F2-2** Cantidad de procesos por replica con 1 CPU de limite (1, 2, 3).
+- [x] **F2-3** Backpressure con fecha limite: cola acotada y `503` con
   `Retry-After` cuando la espera estimada supera el tiempo util (< 30 s del
   timeout de Vegeta), en vez de dejar expirar el request.
 - [ ] **F2-4** Comparar ese limite en la app contra el middleware
   `inFlightReq` de Traefik (responde `429`).
-- [ ] **F2-5** Estrategia de balanceo de Traefik frente a PDFs de costo muy
+- [x] **F2-5** Estrategia de balanceo de Traefik frente a PDFs de costo muy
   distinto (0,3 MB vs 9 MB).
-- [ ] **F2-6** Motor de Markdown: heuristica propia sobre pypdfium2 (tamano de
+- [x] **F2-6** Motor de Markdown: heuristica propia sobre pypdfium2 (tamano de
   fuente -> titulos) vs. librerias existentes, con su licencia y su costo.
-- [ ] **F2-7** Serializacion JSON con orjson (~700 KB de `content` en el PDF
+- [x] **F2-7** Serializacion JSON con orjson (~700 KB de `content` en el PDF
   mas grande).
-- [ ] **F2-8** Pasar los bytes del body directo a pdfium, sin copias.
-- [ ] **F2-9** Pico de memoria por replica con el PDF mas pesado, para
+- [x] **F2-8** Pasar los bytes del body directo a pdfium, sin copias.
+- [x] **F2-9** Pico de memoria por replica con el PDF mas pesado, para
   justificar el limite de F0-7.
 
 ## Fase 3: principios
