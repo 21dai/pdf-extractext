@@ -1,0 +1,8 @@
+apiVersion: 1
+
+providers:
+  - name: tp
+    folder: TP
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

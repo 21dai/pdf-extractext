@@ -11,6 +11,7 @@
 #   POST https://extract.universidad.localhost/extract  (k6; certificado
 #        autofirmado de Traefik: usar --insecure-skip-tls-verify)
 #   Dashboard de Traefik: http://localhost:8080/dashboard/
+#   Monitoreo (opcional): docker compose --profile monitoreo up -d
 name: pdf-extractext-tp
 
 services:
@@ -24,6 +25,10 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      # Metricas en formato Prometheus en :8080/metrics (perfil monitoreo).
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.addServicesLabels=true"
+      - "--metrics.prometheus.buckets=0.1,0.5,1,2.5,5,10,20,30"
     ports:
       - "80:80"
       - "443:443"
@@ -95,3 +100,43 @@ services:
       - "traefik.http.middlewares.reintento.retry.initialinterval=100ms"
       - "traefik.http.routers.extract.middlewares=reintento"
       - "traefik.http.routers.extract-tls.middlewares=reintento"
+
+  # Perfil "monitoreo" (opcional): no se levanta con un "up" comun para no
+  # sacarle CPU a las replicas durante las mediciones.
+  #   docker compose --profile monitoreo up -d
+  #   Grafana: http://localhost:3000 (dashboard "TP - POST /extract")
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoreo"]
+    restart: unless-stopped
+    volumes:
+      - "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    ports:
+      - "9090:9090"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    profiles: ["monitoreo"]
+    restart: unless-stopped
+    environment:
+      # Solo para uso local: el dashboard se ve sin iniciar sesion.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/extract.json
+    volumes:
+      - "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro"
+      - "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M

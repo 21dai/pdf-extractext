@@ -1,0 +1,10 @@
+# Prometheus del perfil "monitoreo" del stack del TP: lee las metricas de
+# Traefik (requests por codigo, latencias, conexiones y reintentos).
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8080"]
