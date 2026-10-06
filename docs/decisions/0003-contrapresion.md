@@ -22,8 +22,12 @@ excede el tiempo util de vida.
 2. **Una extraccion por vez** en un semaforo de asyncio: los admitidos esperan
    sin ocupar un hilo, y el event loop sigue atendiendo HTTP (pista 4).
 3. **Tiempo util**: cuando le toca el turno, si el cliente ya se desconecto
-   no se procesa; si espero mas de `EXTRACT_MAX_WAIT_SECONDS` = 28 s (menos
-   que el timeout de 30 s), recibe `503` sin procesarse.
+   no se procesa; si lo que espero mas una extraccion promedio supera
+   `EXTRACT_MAX_WAIT_SECONDS` = 28 s (menos que el timeout de 30 s), recibe
+   `503` sin procesarse. Hasta la 1.3.0 solo contaba la espera: con la
+   maquina lenta, requests que empezaban cerca de los 28 s terminaban despues
+   de los 30 s (1 y 19 timeouts en dos corridas). Desde la 1.3.1 cuenta
+   tambien la extraccion (0 timeouts).
 
 ## Alternativas medidas
 

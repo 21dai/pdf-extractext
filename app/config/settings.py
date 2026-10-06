@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "API de Extraccion de PDF"
-    app_version: str = "1.3.0"
+    app_version: str = "1.3.1"
     debug: bool = False
     # Nivel de los logs JSON que se escriben en stdout (12-Factor XI).
     log_level: str = "INFO"
@@ -39,9 +39,10 @@ class Settings(BaseSettings):
     # Con false el servicio solo expone POST /extract: no usa MongoDB, arranca
     # sin base de datos y sus replicas no comparten estado (12-Factor VI).
     documents_api_enabled: bool = True
-    # Backpressure de POST /extract: espera estimada maxima con la que se
-    # admite un request. Por encima se responde 503 al instante. Tiene que
-    # quedar por debajo del timeout de los clientes (30 s en el TP).
+    # Backpressure de POST /extract: tiempo util de un request. Si lo que ya
+    # espero mas una extraccion promedio lo supera, se responde 503 sin
+    # procesarlo. Tiene que quedar por debajo del timeout de los clientes
+    # (30 s en el TP).
     extract_max_wait_seconds: float = 28.0
     # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
     # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.

@@ -178,7 +178,7 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual es `1.3.0`. La `1.0.0` fue la primera release estable; la
+- La version actual es `1.3.1`. La `1.0.0` fue la primera release estable; la
   `1.0.1` sumo el hardening del contenedor (issue #18), sin cambios de comportamiento;
   la `1.1.0` cambia la extraccion a `pypdfium2` (unas 15 veces mas rapida) y agrega
   `WEB_CONCURRENCY` para correr varios procesos. Es MINOR porque mejora sin romper
@@ -190,6 +190,9 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   `EXTRACT_MAX_PENDING`, tiempo util con `EXTRACT_MAX_WAIT_SECONDS`, 503 con
   `Retry-After`), `/ready`, logs JSON y el comando de limpieza de documentos.
   MINOR: configuraciones nuevas con valores por defecto, sin romper nada.
+- La `1.3.1` corrige el tiempo util: ademas de lo que espero, cuenta lo que va
+  a tardar la extraccion, asi nada termina despues del timeout del cliente.
+  PATCH: correccion de un bug, sin cambiar la API.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`. Cada release tiene ademas su tag de git (`v1.0.0` ... `v1.3.0`): `git checkout vX.Y.Z` reconstruye exactamente esa version.
 
@@ -217,8 +220,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.3.0
-IMAGE_TAG=1.3.0
+APP_VERSION=1.3.1
+IMAGE_TAG=1.3.1
 DEBUG=False
 # Nivel de los logs JSON en stdout: DEBUG, INFO, WARNING, ERROR.
 LOG_LEVEL=INFO
@@ -235,8 +238,8 @@ DATABASE_TIMEOUT_MS=3000
 MAX_PDF_SIZE_BYTES=10485760
 # false: solo POST /extract, sin MongoDB ni CRUD (las replicas del TP).
 DOCUMENTS_API_ENABLED=true
-# Backpressure de POST /extract: espera estimada maxima para admitir un request;
-# por encima responde 503 con Retry-After. Menor que el timeout de los clientes.
+# Backpressure de POST /extract: tiempo util de un request (espera + extraccion);
+# si no llega a terminar a tiempo, 503 sin procesarlo. Menor que el timeout de los clientes.
 EXTRACT_MAX_WAIT_SECONDS=28
 # Requests de /extract admitidos a la vez por proceso (la cola); llena, 503.
 EXTRACT_MAX_PENDING=30
@@ -389,8 +392,9 @@ responde `200`:
   supera `MAX_PDF_SIZE_BYTES`, `422` si PDFium no puede leerlo.
 - Backpressure: cada proceso admite hasta `EXTRACT_MAX_PENDING` (30) requests a
   la vez; con la cola llena responde `503` con `Retry-After` al instante, sin leer
-  el PDF. Un request que espero su turno mas de `EXTRACT_MAX_WAIT_SECONDS` (28 s)
-  tambien recibe `503` sin procesarse: nunca se gasta CPU en algo que va a vencer.
+  el PDF. Un request que no llegaria a terminar dentro de `EXTRACT_MAX_WAIT_SECONDS`
+  (28 s, contando lo que espero mas una extraccion promedio) tambien recibe `503`
+  sin procesarse: nunca se gasta CPU en algo que va a vencer.
 
 ```powershell
 curl.exe -X POST http://127.0.0.1:8000/extract -H "Content-Type: application/pdf" --data-binary "@tests/stress/pdfs/Filosofia Lean.pdf"
