@@ -191,10 +191,8 @@ class TestExtractBackpressure:
     def saturated_client(self, client: TestClient):
         """Client whose replica already has more work queued than it accepts."""
         gate = client.app.state.admission_gate
-        busy = [gate.admit()]
-        gate.service_seconds = (
-            gate.max_wait_seconds * 2
-        )  # el siguiente esperaria de mas
+        gate.max_pending = 1
+        busy = [gate.admit()]  # la cola queda llena
         yield client
         for ticket in busy:
             ticket.release()

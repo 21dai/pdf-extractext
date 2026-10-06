@@ -1,8 +1,8 @@
 """Unit tests for the admission gate of POST /extract (backpressure).
 
-The gate admits a request only if its estimated wait (pending requests times
-the average service time) stays under the limit, runs one extraction at a
-time, and skips the work of clients that already disconnected.
+The gate admits requests while its queue has room, runs one extraction at a
+time, and skips the work of clients that already left or that waited longer
+than their useful life.
 """
 
 import asyncio
@@ -25,44 +25,58 @@ def run(coro):
     return asyncio.run(coro)
 
 
-class TestAdmission:
-    def test_admits_while_the_estimated_wait_is_under_the_limit(self):
-        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
+def make_gate(**overrides) -> AdmissionGate:
+    options = {
+        "max_wait_seconds": 10.0,
+        "max_pending": 3,
+        "initial_service_seconds": 0.3,
+    }
+    options.update(overrides)
+    return AdmissionGate(**options)
 
-        tickets = [gate.admit() for _ in range(3)]  # espera estimada: 0,9 s
+
+class TestAdmission:
+    """The queue is bounded by count: it protects memory without guessing times.
+
+    Una estimacion de tiempo al llegar admitia de menos: durante un ataque la
+    CPU esta saturada y cada extraccion tarda mas, pero esa cola se vacia mucho
+    mas rapido cuando el ataque termina. El tiempo util lo controla el chequeo
+    exacto en el turno (TestUsefulLife).
+    """
+
+    def test_admits_until_the_queue_is_full(self):
+        gate = make_gate(max_pending=3)
+
+        tickets = [gate.admit() for _ in range(3)]
 
         assert gate.pending == 3
         for ticket in tickets:
             ticket.release()
 
-    def test_admits_up_to_the_margin_over_the_maximum_wait(self):
-        """The estimate on arrival is approximate: it allows 1.5x the maximum.
-
-        El corte exacto lo hace el chequeo en el turno; al llegar solo se
-        rechaza lo que claramente no va a llegar.
-        """
-        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
-
-        tickets = [gate.admit() for _ in range(6)]  # el sexto estimaba 1,5 s
-
-        assert gate.pending == 6
-        for ticket in tickets:
-            ticket.release()
-
-    def test_rejects_with_retry_after_when_the_wait_would_exceed_the_margin(self):
-        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
-        tickets = [gate.admit() for _ in range(6)]  # el siguiente esperaria 1,8 s
+    def test_rejects_with_retry_after_when_the_queue_is_full(self):
+        gate = make_gate(max_pending=3, initial_service_seconds=0.5)
+        tickets = [gate.admit() for _ in range(3)]
 
         with pytest.raises(ServiceOverloadedError) as error:
             gate.admit()
 
-        assert error.value.retry_after_seconds == 2  # 1,8 s redondeado hacia arriba
-        assert gate.pending == 6
+        assert error.value.retry_after_seconds == 2  # 3 x 0,5 s hacia arriba
+        assert gate.pending == 3
         for ticket in tickets:
             ticket.release()
 
+    def test_retry_after_is_at_least_one_second(self):
+        gate = make_gate(max_pending=1, initial_service_seconds=0.01)
+        ticket = gate.admit()
+
+        with pytest.raises(ServiceOverloadedError) as error:
+            gate.admit()
+
+        assert error.value.retry_after_seconds == 1
+        ticket.release()
+
     def test_releasing_a_ticket_frees_its_place(self):
-        gate = AdmissionGate(max_wait_seconds=0.5, initial_service_seconds=0.3)
+        gate = make_gate()
         ticket = gate.admit()
         ticket.release()
         ticket.release()  # liberar dos veces no descuenta de mas
@@ -70,7 +84,7 @@ class TestAdmission:
         assert gate.pending == 0
 
     def test_ticket_is_released_when_used_as_context_manager(self):
-        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
+        gate = make_gate()
 
         with gate.admit():
             assert gate.pending == 1
@@ -80,7 +94,7 @@ class TestAdmission:
 
 class TestTurns:
     def test_runs_the_work_and_returns_its_result(self):
-        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
+        gate = make_gate()
 
         async def work():
             return "markdown"
@@ -92,7 +106,7 @@ class TestTurns:
         assert run(scenario()) == "markdown"
 
     def test_runs_one_extraction_at_a_time(self):
-        gate = AdmissionGate(max_wait_seconds=10.0, initial_service_seconds=0.3)
+        gate = make_gate(max_pending=10)
         running = 0
         max_running = 0
 
@@ -114,7 +128,7 @@ class TestTurns:
         assert max_running == 1
 
     def test_skips_the_work_if_the_client_already_left(self):
-        gate = AdmissionGate(max_wait_seconds=1.0, initial_service_seconds=0.3)
+        gate = make_gate()
         calls = 0
 
         async def work():
@@ -131,7 +145,7 @@ class TestTurns:
 
     def test_learns_the_service_time_from_the_work_it_runs(self):
         now = [0.0]
-        gate = AdmissionGate(
+        gate = make_gate(
             max_wait_seconds=10.0,
             initial_service_seconds=1.0,
             smoothing=0.5,
@@ -154,7 +168,7 @@ class TestUsefulLife:
 
     def test_request_that_waited_too_long_is_rejected_at_its_turn(self):
         now = [0.0]
-        gate = AdmissionGate(
+        gate = make_gate(
             max_wait_seconds=10.0,
             initial_service_seconds=0.3,
             clock=lambda: now[0],
@@ -176,7 +190,7 @@ class TestUsefulLife:
 
     def test_request_within_its_useful_life_is_processed(self):
         now = [0.0]
-        gate = AdmissionGate(
+        gate = make_gate(
             max_wait_seconds=10.0,
             initial_service_seconds=0.3,
             clock=lambda: now[0],
@@ -197,11 +211,11 @@ class TestServiceTimeEstimate:
     def test_a_single_slow_extraction_barely_moves_the_estimate(self):
         """By default the average weighs ~20 extractions, about a whole queue.
 
-        Con un promedio que pesaba ~5 muestras, un par de PDFs grandes seguidos
-        inflaba la estimacion y la compuerta llego a rechazar en el spike.
+        El promedio da el Retry-After: con uno que pesaba ~5 muestras, un par de
+        PDFs grandes seguidos lo inflaba.
         """
         now = [0.0]
-        gate = AdmissionGate(
+        gate = make_gate(
             max_wait_seconds=10.0, initial_service_seconds=0.3, clock=lambda: now[0]
         )
 
