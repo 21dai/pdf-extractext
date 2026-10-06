@@ -372,6 +372,40 @@ Conclusion: ~85 % del CPU por request esta dentro de PDFium, el motor mas
 rapido de los tres probados, y lo que queda en Python no se puede bajar de
 forma medible. Para esta carga, el CPU por request esta en su piso.
 
+### Experimento 7: limite en la app o en Traefik (F2-4, 2026-10-06)
+
+Traefik trae el middleware `inFlightReq`: limita los requests en vuelo y
+responde 429 al resto. Se comparo con Vegeta (50 req/s, 30 s), dos rondas
+intercaladas:
+
+- **app**: la compuerta de la app (cola de 30 por replica, tiempo util de
+  28 s), sin limite en Traefik.
+- **traefik**: `inFlightReq` con 150 en vuelo (5 x 30, comun a todos los
+  clientes) y la compuerta de la app sin limite.
+- **ambos**: las dos cosas.
+
+| Configuracion | Exito | Rechazos | Timeouts | p50 | Pico de memoria |
+|---|---|---|---|---|---|
+| app | 32,7 / 20,7 % | 1.009 / 1.190 (503) | 0 / 0 | 0,07 / 0,13 s | ~420 MiB |
+| traefik | 26,2 / 25,3 % | 1.107 / 1.120 (429) | 0 / 0 | 0,01 / 0,01 s | ~340 MiB |
+| ambos | 22,5 / 25,1 % | ~1.130 (429 + 503) | 0 / 0 | 0,02 / 0,02 s | ~330 MiB |
+
+El exito queda dentro del ruido de esta maquina: ninguna gana. Traefik usa
+menos memoria en las replicas porque rechaza antes de reenviarles el PDF.
+**Se mantiene el limite en la app**, sin el de Traefik:
+
+- Con 150 en vuelo no hubo timeouts porque el numero coincide con lo que las
+  5 replicas terminan en 28 s **en esta maquina y con estos PDFs**. Es un
+  numero fijo: con PDFs mas pesados o una CPU mas lenta, los admitidos vencen
+  esperando. La app corta por tiempo util en el momento del turno, asi que
+  nunca procesa algo que ya vencio.
+- La app responde 503 con `Retry-After`; `inFlightReq` responde 429 sin
+  decirle al cliente cuando reintentar, y 429 significa "este cliente pide
+  demasiado", no "el servicio esta saturado".
+- El limite de Traefik es comun a todas las replicas; el de la app es por
+  replica, y la protege tambien cuando se la usa sin este proxy (por ejemplo,
+  desde `infrastructure`).
+
 ### Estado al cierre de los experimentos
 
 | Prueba | Nosotros | Profesor |

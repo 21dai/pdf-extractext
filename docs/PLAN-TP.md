@@ -105,8 +105,8 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 - [x] **F2-3** Backpressure con fecha limite: cola acotada y `503` con
   `Retry-After` cuando la espera estimada supera el tiempo util (< 30 s del
   timeout de Vegeta), en vez de dejar expirar el request.
-- [ ] **F2-4** Comparar ese limite en la app contra el middleware
-  `inFlightReq` de Traefik (responde `429`).
+- [x] **F2-4** Comparar ese limite en la app contra el middleware
+  `inFlightReq` de Traefik (responde `429`). Empatan; se queda el de la app.
 - [x] **F2-5** Estrategia de balanceo de Traefik frente a PDFs de costo muy
   distinto (0,3 MB vs 9 MB).
 - [x] **F2-6** Motor de Markdown: heuristica propia sobre pypdfium2 (tamano de
