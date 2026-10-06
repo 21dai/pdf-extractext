@@ -315,6 +315,63 @@ memoria de PDFs en espera. Se mantiene 1 proceso por replica.
 Serializar la respuesta cuesta 0,3-1,5 ms contra 150-300 ms de extraccion
 (menos del 1 %): orjson no justifica una dependencia nueva.
 
+### Experimento 5: cuanto rinde cada replica (2026-10-06)
+
+Carga cerrada constante (`tests/stress/escala.js`, 3 usuarios por replica,
+60 s), variando la cantidad de replicas. El CPU por request sale del cgroup de
+las replicas (`usage_usec` antes y despues).
+
+| Replicas | req/s (ronda 1) | CPU por request | req/s (ronda 2) | CPU por request |
+|---|---|---|---|---|
+| 1 | 5,05 | 202 ms | 3,27 | 307 ms |
+| 2 | 9,48 | 189 ms | 5,33 | 393 ms |
+| 3 | 12,68 | 237 ms | - | - |
+| 4 | 12,38 | 320 ms | - | - |
+| 5 | 10,98 | 460 ms | 17,10 | 285 ms |
+
+- En la ronda 1 escala casi lineal hasta 2 replicas y se estanca desde 3: el
+  CPU por request **sube** con las replicas (de ~190 a 460 ms) aunque el codigo
+  es el mismo. Con 4 nucleos fisicos para 5 replicas, Traefik y k6, los
+  procesos comparten nucleo (hyperthreading) y la frecuencia baja.
+- La ronda 2, con el mismo codigo, da otra forma (1 y 2 replicas mas lentas,
+  5 mas rapidas): la frecuencia de la notebook cambio durante la medicion.
+  Los numeros absolutos de esta maquina varian hasta 2 veces entre corridas.
+
+Con una sola replica y 2 usuarios, en 5 corridas de 40 s: **5,5-6,4 req/s**,
+con **159-186 ms de CPU por request**. El benchmark del profesor equivale a
+25,35 / 5 = **5,07 req/s por replica**. Si cada una de las 5 replicas tuviera
+su nucleo a esta velocidad, serian ~28-32 req/s. Es una **proyeccion**, no una
+medicion: supone que el resto de la maquina (proxy y generador de carga) no le
+quita CPU a las replicas, cosa que en esta notebook no pasa.
+
+### Experimento 6: bajar el CPU por request (2026-10-06)
+
+Desglose en el mismo proceso (los 4 PDFs, 8 repeticiones):
+
+| Etapa | Costo | Parte |
+|---|---|---|
+| `FPDF_LoadPage` (PDFium interpreta la pagina) | 68 ms | 46 % |
+| `FPDFText_LoadPage` (PDFium arma el texto) | 55 ms | 37 % |
+| Medir la altura de las lineas (Python + PDFium) | 9 ms | 6 % |
+| Armar el Markdown (Python) | 5 ms | 3 % |
+| Copiar el texto, abrir y cerrar el documento | 5 ms | 4 % |
+
+Por pagina, PDFium cuesta ~1 ms parejo: ningun PDF ni pagina en particular
+dispara el costo. Con py-spy dentro del contenedor y bajo carga, el 92,5 % de
+las muestras estan en la extraccion (79 % dentro de las llamadas a PDFium) y
+~7 % en la capa HTTP. Lo que se probo para bajarlo:
+
+| Intento | Resultado | Decision |
+|---|---|---|
+| PyMuPDF (MuPDF) | texto plano 108 ms, con tamanos de letra 129 ms, contra ~120 ms de PDFium | Descartado: no gana y es AGPL |
+| pdf_oxide (Rust, MIT/Apache) | 356-467 ms por PDF, 2 a 3 veces mas lento | Descartado |
+| jemalloc / mimalloc / umbral de mmap de glibc | dentro del ruido (+-10 % entre corridas) | Descartado |
+| Abrir el documento y medir las letras sin envoltorios de pypdfium2 | -1,2 % y +1,8 % en dos A/B de 30 pares, salida identica | Descartado (no se commitea) |
+
+Conclusion: ~85 % del CPU por request esta dentro de PDFium, el motor mas
+rapido de los tres probados, y lo que queda en Python no se puede bajar de
+forma medible. Para esta carga, el CPU por request esta en su piso.
+
 ### Estado al cierre de los experimentos
 
 | Prueba | Nosotros | Profesor |
@@ -331,11 +388,12 @@ comportamiento bajo sobrecarga: ningun request vence por timeout, los rechazos
 son instantaneos y con `Retry-After`, la memoria esta acotada y no se gasta CPU
 en respuestas que nadie va a leer.
 
-**La comparacion absoluta no es justa todavia**: esta PC es una notebook de
-15 W con 4 nucleos para 5 replicas, Traefik y el generador de carga, y el
-benchmark del profesor no dice en que hardware se midio. La consigna pide
-superarlo "bajo las mismas restricciones de hardware": hay que correr su
-microservicio de referencia en esta misma maquina, o el nuestro en la suya.
+**La comparacion absoluta no es justa**: esta PC es una notebook de 15 W con 4
+nucleos para 5 replicas, Traefik y el generador de carga, y el benchmark del
+profesor no dice en que hardware se midio (ni su microservicio de referencia
+esta disponible para correrlo aca). La comparacion por replica del
+experimento 5 es la mas justa que se puede hacer: con su nucleo propio, una
+replica rinde 5,5-6,4 req/s contra 5,07 del profesor.
 
 ## Como reproducir
 
@@ -344,4 +402,7 @@ docker compose up --build -d
 docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
 docker build -t vegeta:12.13.0 -f tests/stress/docker/vegeta.Dockerfile tests/stress/docker
 docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}/tests/stress:/stress" vegeta:12.13.0 /stress/vegeta.sh http://traefik/extract
+# Experimento 5: capacidad con N replicas (3 usuarios por replica)
+docker compose up -d --scale extract=1
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik -e VUS=3 /scripts/escala.js
 ```

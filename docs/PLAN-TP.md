@@ -116,6 +116,11 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 - [x] **F2-8** Pasar los bytes del body directo a pdfium, sin copias.
 - [x] **F2-9** Pico de memoria por replica con el PDF mas pesado, para
   justificar el limite de F0-7.
+- [x] **F2-10** Capacidad por replica (1 a 5 replicas, `escala.js`) para
+  comparar con el profesor sin depender del hardware.
+- [x] **F2-11** Bajar el CPU por request: otros motores (PyMuPDF,
+  pdf_oxide), allocators y quitar envoltorios. Ninguno gana: queda en el piso
+  de PDFium.
 
 ## Fase 3: principios
 
