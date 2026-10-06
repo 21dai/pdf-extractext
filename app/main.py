@@ -73,6 +73,7 @@ def create_app() -> FastAPI:
     # Una compuerta por proceso: cada uno extrae un PDF por vez (PDFium).
     app.state.admission_gate = AdmissionGate(
         max_wait_seconds=settings.extract_max_wait_seconds,
+        max_pending=settings.extract_max_pending,
         initial_service_seconds=INITIAL_SERVICE_SECONDS,
     )
     register_problem_details_handlers(app)

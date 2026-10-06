@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # admite un request. Por encima se responde 503 al instante. Tiene que
     # quedar por debajo del timeout de los clientes (30 s en el TP).
     extract_max_wait_seconds: float = 28.0
+    # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
+    # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.
+    extract_max_pending: int = 60
 
     # MongoDB Auth
     root_username: str = ""

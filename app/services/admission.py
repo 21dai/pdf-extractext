@@ -7,19 +7,20 @@ gastado en respuestas que nadie lee, mientras los nuevos tambien vencen.
 
 La compuerta:
 
-1. Admite un request solo si su espera estimada (pendientes x tiempo de
-   servicio promedio) no supera el maximo con un margen (ADMISSION_MARGIN);
-   si no, lo rechaza al instante con 503 y Retry-After, antes de leer el PDF.
-   Es una estimacion: el margen evita rechazar de mas cuando la CPU esta
-   cargada, y acota la memoria de los PDFs que esperan en cola.
+1. Admite requests mientras su cola tenga lugar (`max_pending`). Llena, el
+   siguiente recibe 503 con Retry-After al instante, antes de leer el PDF.
+   La cola se acota por cantidad y no por una estimacion de tiempo: durante
+   un ataque la CPU esta saturada y cada extraccion tarda mas, pero esa cola
+   se vacia mucho mas rapido cuando el ataque termina; una estimacion hecha
+   en el momento admitia de menos y dejaba capacidad sin usar. El limite
+   tambien acota la memoria de los PDFs que esperan.
 2. Corre una extraccion por vez: los admitidos esperan en un semaforo de
    asyncio (barato) en vez de bloquear un hilo cada uno contra el lock de
    PDFium. El event loop sigue atendiendo HTTP mientras se extrae.
 3. Cuando le toca el turno, si el cliente ya se fue o si el request ya
-   espero mas que el maximo (su tiempo util), no hace el trabajo: el
-   primero no tiene a quien responderle y el segundo recibe 503 al instante.
-   Este chequeo es exacto; la estimacion del punto 1 solo corta lo que
-   claramente no va a llegar.
+   espero mas que `max_wait_seconds` (su tiempo util), no hace el trabajo:
+   el primero no tiene a quien responderle y el segundo recibe 503 al
+   instante. Asi nunca se gasta CPU en algo que va a vencer.
 """
 
 import asyncio
@@ -32,10 +33,6 @@ from app.core.exceptions import ClientDisconnectedError, ServiceOverloadedError
 
 Result = TypeVar("Result")
 
-# Al llegar se admite hasta 1,5 veces la espera maxima: el corte exacto lo
-# hace el chequeo en el turno (ver Ticket.run).
-ADMISSION_MARGIN = 1.5
-
 
 class AdmissionGate:
     """Decide which requests enter, and run their work one at a time."""
@@ -43,6 +40,7 @@ class AdmissionGate:
     def __init__(
         self,
         max_wait_seconds: float,
+        max_pending: int,
         initial_service_seconds: float,
         smoothing: float = 0.05,
         clock: Callable[[], float] = time.monotonic,
@@ -50,14 +48,17 @@ class AdmissionGate:
         """Initialize the gate.
 
         Args:
-            max_wait_seconds: Longest estimated wait a request is admitted with
+            max_wait_seconds: Useful life of a request: if it waited longer for
+                its turn, it is rejected without processing it
+            max_pending: Requests admitted at the same time (queue size)
             initial_service_seconds: Service time assumed until there are
-                measurements
+                measurements; the average only feeds the Retry-After
             smoothing: Weight of each new measurement in the moving average;
                 0.05 weighs ~20 extractions, about a whole queue
             clock: Monotonic clock, injectable for tests
         """
         self.max_wait_seconds = max_wait_seconds
+        self.max_pending = max_pending
         self.service_seconds = initial_service_seconds
         self.smoothing = smoothing
         self.pending = 0
@@ -65,15 +66,13 @@ class AdmissionGate:
         self._turn = asyncio.Semaphore(1)
 
     def admit(self) -> "Ticket":
-        """Admit a request, or reject it if it would wait too long.
+        """Admit a request, or reject it if the queue is full.
 
         Raises:
-            ServiceOverloadedError: If the estimated wait exceeds the maximum
-                with its margin.
+            ServiceOverloadedError: If `max_pending` requests are already in.
         """
-        estimated_wait = self.pending * self.service_seconds
-        if estimated_wait > self.max_wait_seconds * ADMISSION_MARGIN:
-            raise self._overloaded(estimated_wait)
+        if self.pending >= self.max_pending:
+            raise self._overloaded(self.pending * self.service_seconds)
         self.pending += 1
         return Ticket(self, admitted_at=self._clock())
 
