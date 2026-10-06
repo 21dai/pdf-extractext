@@ -107,6 +107,20 @@ export function lineaCodigos(data) {
     .join("     ");
 }
 
+// Una linea por umbral del SLO (thresholds de k6), con si se cumplio.
+export function lineasSlo(data) {
+  const l = ["  SLO (thresholds de k6)", "  " + "-".repeat(60)];
+  let cumple = true;
+  for (const [metrica, m] of Object.entries(data.metrics)) {
+    for (const [umbral, r] of Object.entries(m.thresholds || {})) {
+      cumple = cumple && r.ok;
+      l.push("  " + `${metrica} ${umbral}`.padEnd(46) + (r.ok ? "cumple" : "NO CUMPLE"));
+    }
+  }
+  l.push("  " + (cumple ? "SLO CUMPLIDO" : "SLO INCUMPLIDO (k6 termina con codigo 99)"));
+  return l;
+}
+
 // "MEJOR" / "peor" / "igual"; menor es mejor salvo que se indique lo contrario.
 function comparar(nuestro, profesor, mayorEsMejor) {
   if (Math.abs(nuestro - profesor) < 1e-9) return "igual";

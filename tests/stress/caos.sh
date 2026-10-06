@@ -47,6 +47,8 @@ caos() {
 }
 caos &
 
+# Con una replica caida el SLO del spike puede no cumplirse: es lo que se mide.
 docker run --rm --network pdf-extractext-tp_default -v "$STRESS:/scripts:ro" \
-  grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
+  grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js \
+  || echo ">> k6 termino con codigo $? (99: SLO incumplido)"
 wait

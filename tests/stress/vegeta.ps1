@@ -90,3 +90,11 @@ if ($Rate -ne "50" -or $Duration -ne "30s" -or $Timeout -ne "30s") {
 }
 Write-Host ("=" * 70)
 Write-Host "grafico: $plotOutput"
+
+# SLO bajo sobrecarga: ningun request vence por timeout (codigo 0 en Vegeta).
+# Lo que el servicio no puede atender a tiempo se rechaza al instante con 503.
+if ($timeouts -gt 0) {
+    Write-Host "SLO INCUMPLIDO: $timeouts requests vencieron por timeout"
+    exit 1
+}
+Write-Host "SLO cumplido: ningun request vencio por timeout"

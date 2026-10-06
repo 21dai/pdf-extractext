@@ -42,3 +42,12 @@ vegeta plot "$RESULTS/$NAME.bin" > "$RESULTS/$NAME.html"
 echo
 echo "Profesor: 16.65 req/s efectivos, 998/1500 exitosas (66.53 %), 501 timeouts, p50 14.89 s"
 echo "grafico: $RESULTS/$NAME.html"
+
+# SLO bajo sobrecarga: ningun request vence por timeout (codigo 0 en Vegeta).
+# Lo que el servicio no puede atender a tiempo se rechaza al instante con 503.
+timeouts="$(grep -o '"0":[0-9]*' "$RESULTS/$NAME.json" | cut -d: -f2 || true)"
+if [ "${timeouts:-0}" -gt 0 ]; then
+  echo "SLO INCUMPLIDO: $timeouts requests vencieron por timeout"
+  exit 1
+fi
+echo "SLO cumplido: ningun request vencio por timeout"

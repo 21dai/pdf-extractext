@@ -6,13 +6,15 @@
 //   k6 run -e MODO=multipart tests/stress/spike.js      (multipart en vez de body crudo)
 //   k6 run --out "web-dashboard=export=reporte.html" tests/stress/spike.js
 //
-// Variables: BASE_URL, VUS, SUBIDA, MESETA, BAJADA, MODO (crudo | multipart), LOG.
+// Variables: BASE_URL, VUS, SUBIDA, MESETA, BAJADA, MODO (crudo | multipart), LOG,
+// SLO_RPS (throughput minimo del SLO, depende del hardware).
 // Contrato que se mide: POST /extract -> 200 {"content": "...", "page_count": N}.
+// Si no se cumple el SLO, k6 termina con codigo de salida 99.
 
 import { check } from "k6";
 import {
   ANCHO, BASE_URL, HOSTS, MODO, PDFS, encabezadoComparacion, enviar, filaComparacion,
-  formato, lineaCodigos, pct, registrar, tablaPorPdf,
+  formato, lineaCodigos, lineasSlo, pct, registrar, tablaPorPdf,
 } from "./comun.js";
 
 const VUS = Number(__ENV.VUS || 100);
@@ -33,6 +35,16 @@ export const options = {
     { duration: ETAPAS.bajada, target: 0 },
   ],
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "max"],
+  // SLO del servicio bajo el spike (docs/INFORME-TP.md, Fase 3):
+  thresholds: {
+    // disponibilidad: al menos 99 % de los PDFs extraidos;
+    exito_por_documento: ["rate>=0.99"],
+    // latencia de las respuestas 200: p95 menor a 12 s y ninguna cerca del
+    // timeout de 30 s de los clientes;
+    tiempo_por_documento: ["p(95)<12000", "max<30000"],
+    // throughput: depende del hardware (8 req/s en la notebook del grupo).
+    codigo_200: [`rate>=${Number(__ENV.SLO_RPS || 8)}`],
+  },
 };
 
 // Benchmark de la catedra con este mismo perfil (consigna del TP, seccion A).
@@ -106,6 +118,8 @@ export function handleSummary(data) {
     l.push(filaComparacion("Latencia p95", t.values["p(95)"] / 1000, PROFESOR.p95, formato.s, false));
     l.push(filaComparacion("Latencia maxima", t.values.max / 1000, PROFESOR.max, formato.s, false));
   }
+  l.push("");
+  l.push(...lineasSlo(data));
   if (!perfilDelProfesor) {
     l.push("");
     l.push("  Aviso: el perfil de carga no es el del profesor (100 VUs, 10s/20s/10s); la comparacion no es valida.");
