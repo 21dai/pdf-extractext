@@ -200,6 +200,8 @@ DOCUMENTS_API_ENABLED=true
 # Backpressure de POST /extract: espera estimada maxima para admitir un request;
 # por encima responde 503 con Retry-After. Menor que el timeout de los clientes.
 EXTRACT_MAX_WAIT_SECONDS=28
+# Requests de /extract admitidos a la vez por proceso (la cola); llena, 503.
+EXTRACT_MAX_PENDING=30
 
 API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
@@ -347,9 +349,10 @@ responde `200`:
   (`app/core/markdown.py`) y las vinetas como items de lista.
 - Errores en formato RFC 9457: `400` si no es un PDF o esta vacio, `413` si
   supera `MAX_PDF_SIZE_BYTES`, `422` si PDFium no puede leerlo.
-- Backpressure: si la replica ya tiene mas trabajo del que puede terminar en
-  `EXTRACT_MAX_WAIT_SECONDS` (28 s), responde `503` con `Retry-After` al instante,
-  sin leer el PDF, en vez de dejarlo esperar hasta el timeout del cliente.
+- Backpressure: cada proceso admite hasta `EXTRACT_MAX_PENDING` (30) requests a
+  la vez; con la cola llena responde `503` con `Retry-After` al instante, sin leer
+  el PDF. Un request que espero su turno mas de `EXTRACT_MAX_WAIT_SECONDS` (28 s)
+  tambien recibe `503` sin procesarse: nunca se gasta CPU en algo que va a vencer.
 
 ```powershell
 curl.exe -X POST http://127.0.0.1:8000/extract -H "Content-Type: application/pdf" --data-binary "@tests/stress/pdfs/Filosofia Lean.pdf"
