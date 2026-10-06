@@ -126,6 +126,19 @@ docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}
 Los resultados quedan en `tests/stress/results/` (ignorado por git): `.bin`,
 `.json`, el grafico `.html` y el `targets.txt` generado.
 
+## C. Capacidad segun la cantidad de replicas (`escala.js`)
+
+Carga cerrada constante, sin sobrecarga: mide cuantos req/s rinde el servicio
+con N replicas. Conviene 3 usuarios por replica (`VUS=3*N`):
+
+```powershell
+docker compose up -d --scale extract=2
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik -e VUS=6 /scripts/escala.js
+```
+
+Imprime una linea `RESULTADO ok=... rps=... p50=... p95=...`. `DUR` cambia la
+duracion (default `60s`).
+
 ## Benchmark del profesor
 
 | Prueba | Resultado |
