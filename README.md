@@ -13,6 +13,40 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 - Joaquin Antequeda
 - Nicolas Santivanez
 
+## TP de carga y estres: reproducir el benchmark
+
+Solo hace falta Docker. Desde PowerShell, en la raiz del repo:
+
+```powershell
+# 1. Traefik + 5 replicas de POST /extract (1 CPU y 1 GB cada una)
+docker compose up --build -d
+
+# 2. Spike del profesor con k6 (100 VUs, 10s/20s/10s)
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
+
+# 3. Carga fija del profesor con Vegeta (50 req/s, 30 s, timeout 30 s)
+docker build -t vegeta:12.13.0 -f tests/stress/docker/vegeta.Dockerfile tests/stress/docker
+docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}/tests/stress:/stress" vegeta:12.13.0 /stress/vegeta.sh http://traefik/extract
+
+# 4. Apagar
+docker compose down
+```
+
+Cada script imprime la comparacion con el benchmark del profesor y si se
+cumplio el SLO. Los generadores de carga corren dentro de la red de Docker: en
+Windows, el reenvio de puertos de Docker Desktop distorsiona los resultados.
+
+| Prueba | Nosotros (v1.3.0) | Profesor |
+|---|---|---|
+| Spike: throughput / errores | 10,5 req/s / 0 % | 25,35 req/s / 0 % |
+| Vegeta: timeouts / p50 | **0 / 0,1-0,8 s** | 501 / 14,89 s |
+
+Medido en una notebook con 4 nucleos fisicos para 5 replicas, Traefik y el
+generador de carga. El analisis completo (arquitectura, cuello de botella,
+antes y despues, proceso de investigacion) esta en
+[docs/INFORME-TP.md](docs/INFORME-TP.md) y las decisiones en
+[docs/decisions](docs/decisions/README.md).
+
 ## Estado actual
 
 - `POST /extract` sin estado, el endpoint del TP: recibe un PDF (body crudo o
@@ -566,7 +600,8 @@ Convenciones vigentes:
 
 - `ARCHITECTURE.md`: capas, nucleo, modos de despliegue y operacion.
 - `docs/PLAN-TP.md`: plan del TP de carga y estres.
-- `docs/INFORME-TP.md`: mediciones y decisiones del TP.
+- `docs/INFORME-TP.md`: informe del TP (arquitectura, cuello de botella, antes y despues, proceso de investigacion) y bitacora de mediciones.
+- `docs/decisions/`: ADRs con cada decision y las alternativas medidas.
 - `docs/REVISION_ENUNCIADO.md`: chequeo punto por punto contra el enunciado.
 - `docs/DEMO.md`: guion para mostrar la API y el TP en clase.
 - `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.

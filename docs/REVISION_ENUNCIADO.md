@@ -174,3 +174,21 @@ Eso no invalida el flujo principal del trabajo, pero conviene explicarlo si apar
 El TP posterior (endpoint `POST /extract`, 5 replicas, pruebas con k6 y
 Vegeta) se sigue en [PLAN-TP.md](PLAN-TP.md) y sus mediciones en
 [INFORME-TP.md](INFORME-TP.md).
+
+### Chequeo contra la consigna del TP
+
+| Requisito | Donde se cumple |
+|---|---|
+| `POST /extract` con PDF en multipart o body crudo | `app/api/routers/extract.py`, tests en `tests/api/test_extract.py` |
+| `200` con `{"content": <Markdown>, "page_count": N}` | `app/core/markdown.py`; los 4 PDFs oficiales en los tests |
+| Imagen Docker y `docker compose up --build` | `docker/Dockerfile`, `docker-compose.yml` de la raiz |
+| Hasta 5 replicas con limites explicitos | 5 replicas de 1 CPU y 1 GB; Traefik 1 CPU y 512 MB |
+| PDFs oficiales en `tests/stress/pdfs` | los 4 PDFs, versionados como binarios |
+| Script de k6 para el spike | `tests/stress/spike.js` (perfil del profesor, SLO como thresholds) |
+| Script de Vegeta para la carga fija | `tests/stress/vegeta.sh` y `vegeta.ps1` |
+| Pista 1: extraer sin disco ni buffers duplicados | body y multipart en memoria (test que falla si algo va a disco); PDFium lee de los bytes |
+| Pista 2: backpressure con 429/503 | cola de 30 y tiempo util de 28 s, `503` con `Retry-After` ([ADR 0003](decisions/0003-contrapresion.md)) |
+| Pista 3: replicas detras de un reverse proxy | Traefik con round robin y reintentos |
+| Pista 4: separar HTTP de la extraccion | endpoint async; extraccion en el threadpool, una por vez |
+| Twelve-Factor: config, port binding, sin estado, logs a stdout | informe, seccion 2 |
+| Informe: arquitectura, cuello de botella, antes/despues, proceso de investigacion | [INFORME-TP.md](INFORME-TP.md), secciones 2 a 5 |

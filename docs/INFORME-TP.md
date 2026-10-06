@@ -1,35 +1,252 @@
-# Informe del TP: Test de Carga, Estres y Optimizacion
+# Informe del TP: Test de Carga, Estres y Optimizacion de Microservicio
 
-Informe tecnico de la entrega. Se completa con cada medicion; el plan de
-trabajo esta en [PLAN-TP.md](PLAN-TP.md) y los scripts en
+Microservicio `pdf-extractext`, version 1.3.0 (2026-10-06). Las secciones 1 a
+7 son el informe; el anexo es la bitacora con cada medicion en el orden en que
+se hizo. Las decisiones estan en [decisions/](decisions/README.md), el plan de
+trabajo en [PLAN-TP.md](PLAN-TP.md) y los scripts en
 [tests/stress](../tests/stress/README.md).
 
-## Arquitectura
+## 1. Resumen
 
+`POST /extract` recibe un PDF y devuelve su contenido en Markdown con la
+cantidad de paginas. Corre en 5 replicas sin estado de 1 CPU y 1 GB detras de
+Traefik, y se levanta con `docker compose up --build`.
+
+Medicion final en la misma notebook, intercalando la primera version con
+`/extract` (v1.2.0) y la final (v1.3.0):
+
+| Prueba | Antes (v1.2.0) | Despues (v1.3.0) | Profesor |
+|---|---|---|---|
+| Spike: throughput (mediana de 4) | 8,3 req/s | **10,5 req/s** | 25,35 req/s |
+| Spike: p95 (mediana de 4) | 15,0 s | **11,1 s** | 8,80 s |
+| Spike: errores | 0 % | 0 % | 0 % |
+| Vegeta: exito | 12,3 / 13,2 % | **20,8 / 22,9 %** | 66,53 % |
+| Vegeta: timeouts | 1.315 / 1.302 | **0 / 0** | 501 |
+| Vegeta: p50 | 30,00 s | **0,81 / 0,11 s** | 14,89 s |
+
+- **Bajo sobrecarga le ganamos al profesor**: ningun request vence por
+  timeout (el tiene 501) y la mediana de Vegeta es de 0,1-0,8 s contra 14,89 s.
+  Lo que no se puede atender a tiempo se rechaza al instante con `503` y
+  `Retry-After`.
+- **En throughput no le ganamos en esta maquina**, y no se puede saber si le
+  ganariamos en la suya: es una notebook con 4 nucleos fisicos para 5
+  replicas, Traefik y el generador de carga, y el benchmark del profesor no
+  dice en que hardware se midio. Por replica con un nucleo propio, la nuestra
+  rinde **5,5-6,4 req/s** contra **5,07** de la suya (25,35 / 5).
+
+## 2. Arquitectura y decisiones de diseno
+
+```mermaid
+flowchart LR
+    C[k6 / Vegeta] -->|POST /extract| T[Traefik v3<br/>round robin + reintentos]
+    T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
+    subgraph Replica [dentro de cada replica]
+        G[AdmissionGate<br/>cola de 30, tiempo util 28 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
+    end
+    R --> G
 ```
-cliente (k6 / Vegeta)
-   |  POST /extract  (PDF crudo o multipart)
-   v
-Traefik v3.7  ---- round robin ---->  extract x5  (1 CPU, 1 GB c/u)
- (1 CPU, 512 MB)                       FastAPI + uvicorn + pypdfium2
-                                       sin estado, sin base de datos
+
+| Decision | Por que | ADR |
+|---|---|---|
+| `/extract` sin estado, sin base de datos | replicas intercambiables (12-Factor VI); se pueden escalar y reintentar | [0001](decisions/0001-contrato-de-extract.md) |
+| PDFium con su API cruda + Markdown por altura de letra | el motor mas rapido de los medidos, licencia Apache/BSD | [0002](decisions/0002-motor-de-extraccion-y-markdown.md) |
+| Cola de 30 por replica, tiempo util de 28 s, `503` con `Retry-After` | no gastar CPU en requests que van a vencer | [0003](decisions/0003-contrapresion.md) |
+| 5 replicas de 1 CPU, 1 proceso cada una, round robin | el CPU es el limite; mas procesos por replica no suman | [0004](decisions/0004-workers-y-replicas.md) |
+| Reinicio automatico, reintentos de Traefik, apagado ordenado | una replica caida no tira el servicio | [0005](decisions/0005-tolerancia-a-fallos.md) |
+| Medir dentro de la red de Docker, con Vegeta real, intercalando | numeros comparables y repetibles | [0006](decisions/0006-metodologia-de-medicion.md) |
+
+Patrones aplicados: **API Gateway** (Traefik como unico punto de entrada),
+**Bulkhead** (cada replica con su CPU, su memoria y su cola: una saturada no
+arrastra a las demas), **backpressure** con tiempo util, **health checks**
+separados (`/health` liveness, `/ready` readiness) y **retry** en el proxy.
+
+Twelve-Factor: configuracion por variables de entorno (III), build, release y
+run separados con una imagen por version y tag de git (V), procesos sin estado
+(VI), port binding (VII), concurrencia por replicas (VIII), arranque en ~5 s y
+apagado ordenado (IX), el mismo `docker compose` en desarrollo y en la prueba
+(X), logs JSON a stdout (XI) y procesos de administracion con el mismo codigo
+(XII).
+
+## 3. Cuello de botella
+
+1. **El CPU de la extraccion.** El 92,5 % del tiempo de una replica bajo
+   carga esta en la extraccion y el 79 % dentro de las llamadas a PDFium
+   (py-spy). PDFium cuesta ~1 ms por pagina, parejo en los 4 PDFs: no hay un
+   PDF ni una pagina que dispare el costo. Un request cuesta 160-200 ms de CPU
+   con un nucleo propio, lo que pone el techo de una replica de 1 CPU en ~5-6
+   req/s. Se probaron otros dos motores y tres allocators: ninguno gana
+   (anexo, experimento 6).
+2. **El hardware de la notebook.** Con 4 nucleos fisicos para 5 replicas,
+   Traefik y el generador de carga, el CPU por request sube de ~190 ms con 1-2
+   replicas a 460 ms con 5 (experimento 5): las replicas se reparten nucleos.
+   Por eso agregar replicas en esta maquina no suma despues de 3.
+3. **El colapso del modelo abierto.** A 50 req/s entra el doble de lo que se
+   puede procesar. Sin control, cada replica encola todo y procesa requests
+   cuyo cliente ya se fue: la v1.2.0 completa 3 req/s con 1.300 timeouts, y
+   el profesor 16,65 req/s con 501. No es falta de CPU sino CPU desperdiciado;
+   se resuelve rechazando a tiempo (ADR 0003).
+4. **El entorno de medicion** (resuelto). Desde Windows, el reenvio de puertos
+   de Docker Desktop limitaba el throughput a la mitad; se mide dentro de la
+   red de Docker.
+
+## 4. Metricas antes y despues
+
+Spike (k6, 100 VUs, 10 s / 20 s / 10 s), 4 rondas intercaladas:
+
+| Ronda | Antes: req/s | Antes: p95 | Antes: max | Despues: req/s | Despues: p95 | Despues: max |
+|---|---|---|---|---|---|---|
+| 1 | 12,12 | 11,43 s | 13,68 s | 9,73 | 11,43 s | 13,58 s |
+| 2 | 8,16 | 16,44 s | 18,25 s | 10,30 | 10,80 s | 12,01 s |
+| 3 | 8,16 | 15,96 s | 19,16 s | 10,82 | 11,83 s | 13,41 s |
+| 4 | 8,48 | 14,10 s | 15,02 s | 10,77 | 10,15 s | 10,88 s |
+| **Mediana** | **8,3** | **15,0 s** | **16,6 s** | **10,5** | **11,1 s** | **12,7 s** |
+
+Las dos versiones terminan el spike sin errores. La final rinde mas y es mas
+estable (9,7-10,8 req/s contra 8,2-12,1). Vegeta (50 req/s, 30 s, timeout
+30 s), 2 rondas intercaladas:
+
+| Ronda | Antes: exito | Antes: timeouts | Antes: p50 | Despues: exito | Despues: timeouts | Despues: p50 | Despues: 503 |
+|---|---|---|---|---|---|---|---|
+| 1 | 12,3 % | 1.315 | 30,00 s | 20,8 % | 0 | 0,81 s | 1.188 |
+| 2 | 13,2 % | 1.302 | 30,00 s | 22,9 % | 0 | 0,11 s | 1.156 |
+
+Efecto de cada cambio, medido por separado (detalle en el anexo):
+
+| Cambio | Efecto medido | Se adopto |
+|---|---|---|
+| API cruda de PDFium en vez de los objetos de pypdfium2 | -5,8 % de CPU por PDF, salida identica | si |
+| Compuerta: una extraccion por vez + cola acotada | spike +16 % (10,3 -> 12 req/s) | si |
+| Tiempo util de 28 s + cola de 30 | Vegeta: de cientos de timeouts a 0 | si |
+| Cola de 100 | colapso en una corrida (985 timeouts) | no |
+| Estimar la espera al llegar | 57-141 timeouts y un 503 en el spike | no |
+| `leasttime` / `p2c` en Traefik | `leasttime` 1.172 rechazos; `p2c` igual a `wrr` | no |
+| 2 procesos por replica | mismo throughput, p95 peor, doble memoria | no |
+| orjson | JSON < 1 % del costo | no |
+| PyMuPDF, pdf_oxide, jemalloc, mimalloc | ninguno gana | no |
+| `inFlightReq` de Traefik | empate con el limite de la app | no |
+| Reintentos de Traefik | 502 por caida de ~29 a ~18 | si |
+| Apagado ordenado con 35 s de gracia | 0 requests perdidos al apagar una replica | si |
+
+## 5. Proceso de investigacion
+
+Cada paso fue: una hipotesis, una medicion que la confirma o la descarta, y
+una decision. Los errores propios tambien estan, porque cambiaron el camino.
+
+1. **Cumplir la consigna primero** (Fase 0). `/extract` sin estado con TDD
+   (commit del test en rojo, despues el verde). Para el Markdown se midieron
+   librerias (AGPL o con modelos de ML) contra una heuristica propia por altura
+   de letra: la propia cuesta +22 % sobre el texto plano midiendo una letra
+   por linea, contra +48 % midiendo tres, con el mismo resultado.
+2. **La primera medicion no tenia sentido**: el PDF de 9 MB tardaba 41 s y el
+   de 0,3 MB 3 s, con las replicas al 20 % de CPU. El tiempo crecia con el
+   tamano del archivo y no con las paginas: el limite era el reenvio de
+   puertos de Docker Desktop. Desde entonces se mide dentro de la red de
+   Docker (el throughput se duplico sin tocar el codigo).
+3. **Una hipotesis equivocada**: con `docker stats` parecia que cada request
+   costaba 3 veces mas CPU con 20 en vuelo, y apuntaba a la pelea entre el
+   event loop y el hilo de extraccion. Leyendo el tiempo de CPU del proceso en
+   `/proc` el costo resulto igual con 1, 5 o 20 requests. Se corrigio en el
+   informe y el foco paso a donde se va el CPU.
+4. **Perfilar antes de optimizar**: py-spy mostro 72 % en PDFium, ~10 % en los
+   envoltorios de pypdfium2, ~10 % en el Markdown y ~5 % en HTTP. Se reemplazo
+   el bucle de paginas por la API cruda (-5,8 %, comprobado con 30 pares
+   alternados y salida identica byte a byte). El HTTP no era el problema.
+5. **El modelo abierto colapsaba por trabajo desperdiciado.** Primer intento:
+   estimar la espera al llegar (cantidad en cola x tiempo promedio). Fallo de
+   dos formas: rechazo 1 request en el spike y, durante el ataque de Vegeta,
+   la estimacion admitia de menos. Segundo intento: acotar la cola por
+   cantidad y controlar el tiempo util en el momento del turno. Se midieron
+   colas de 30, 60 y 100: con 100 la cola guarda mas trabajo del que entra en
+   28 s y en una corrida vencio todo; con 30, cero timeouts.
+6. **Un error de medicion grande**: la carga fija con k6 daba porcentajes
+   inflados porque k6 descartaba iteraciones sin contarlas (no llega a crear
+   los ~1.500 usuarios que hacen falta con PDFs de 9 MB). Se descarto esa
+   herramienta para la carga fija, se paso a Vegeta real en un contenedor y
+   el script de k6 ahora cuenta lo descartado como falla.
+7. **Configuracion**: balanceo (`leasttime` empeora con rechazos), procesos por
+   replica (no suman con 1 CPU) y orjson (el JSON pesa menos del 1 %), todos
+   medidos y descartados.
+8. **¿Por que no llegamos a 25 req/s?** Midiendo de 1 a 5 replicas, el
+   throughput sube hasta 3 y se estanca, y el CPU por request crece con las
+   replicas: es el hardware. Con un nucleo propio, una replica rinde mas que
+   el promedio por replica del profesor.
+9. **¿Se puede bajar el CPU por request?** Otros motores (PyMuPDF, pdf_oxide),
+   otros allocators y quitar mas envoltorios: nada gana por fuera del ruido.
+   Lo que no mejora no se commitea.
+10. **Limite en la app o en el proxy**: `inFlightReq` de Traefik empata en
+    exito, pero es un numero fijo sin tiempo util y responde 429 sin
+    `Retry-After`. Se quedo el de la app.
+11. **Resiliencia** (Fase 3): la prueba de caos mostro ~29 errores por caida;
+    los reintentos de Traefik los bajan a ~18 y el apagado ordenado no pierde
+    ninguno. El SLO quedo cargado en los scripts para que cada corrida diga
+    sola si se cumple.
+
+Una opcion se descarto a proposito: cachear la respuesta por checksum del PDF.
+Las pruebas repiten siempre los mismos 4 PDFs, asi que daria miles de req/s,
+pero seria aprovechar el benchmark y no mejorar el servicio.
+
+## 6. Comparacion con el profesor
+
+| Prueba | Nosotros (mediana final) | Profesor | |
+|---|---|---|---|
+| Spike: throughput | 10,5 req/s (mejor corrida: 15,34) | 25,35 req/s | peor |
+| Spike: errores | 0 % | 0 % | igual |
+| Spike: p95 | 11,1 s (mejor corrida: 7,53 s) | 8,80 s | peor en la mediana |
+| Vegeta: exito | 20,8-22,9 % | 66,53 % | peor |
+| Vegeta: timeouts | 0 | 501 | **mejor** |
+| Vegeta: p50 | 0,11-0,81 s | 14,89 s | **mejor** |
+| Por replica, con nucleo propio | 5,5-6,4 req/s | 5,07 req/s | **mejor** |
+
+La consigna pide superarlo "bajo las mismas restricciones de hardware", y esa
+condicion no se puede verificar desde aca: no se sabe en que hardware midio
+el profesor ni esta disponible su microservicio para correrlo en esta
+notebook. Lo que si se puede afirmar con mediciones:
+
+- El servicio maneja la congestion como pide la nota tecnica de la consigna:
+  ningun tiempo de respuesta supera el timeout.
+- Cada replica, cuando tiene su nucleo, rinde mas que el promedio por replica
+  del profesor. Si en su maquina cada replica tiene un nucleo libre, la
+  proyeccion es ~28-32 req/s en el spike; es una proyeccion, no una medicion.
+- En esta notebook el throughput absoluto varia hasta el doble entre corridas
+  con el mismo codigo (de 6 a 15 req/s en el spike), por eso todas las
+  comparaciones del informe son intercaladas y repetidas.
+
+## 7. Como reproducir
+
+Ver tambien [tests/stress/README.md](../tests/stress/README.md) y el
+[runbook](RUNBOOK.md). Desde PowerShell, en la raiz del repo:
+
+```powershell
+docker compose up --build -d
+# Spike con k6 (termina con codigo 99 si no se cumple el SLO)
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
+# Carga fija con Vegeta (termina con codigo 1 si algun request vence por timeout)
+docker build -t vegeta:12.13.0 -f tests/stress/docker/vegeta.Dockerfile tests/stress/docker
+docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}/tests/stress:/stress" vegeta:12.13.0 /stress/vegeta.sh http://traefik/extract
+# Capacidad con N replicas (3 usuarios por replica)
+docker compose up -d --scale extract=1
+docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik -e VUS=3 /scripts/escala.js
+# Prueba de caos (desde Git Bash) y monitoreo
+docker compose up -d
+bash tests/stress/caos.sh caida 15
+docker compose --profile monitoreo up -d
+docker compose down
 ```
 
-- **Sin estado (12-Factor VI).** `/extract` valida y extrae; no calcula
-  checksum, no busca duplicados y no escribe en MongoDB. Las replicas corren
-  con `DOCUMENTS_API_ENABLED=false`: arrancan sin base de datos y su
-  `/health` no depende de ella.
-- **Motor de extraccion: pypdfium2** (PDFium, el motor de Chrome; licencia
-  Apache/BSD). Ya lo habiamos elegido contra pypdf (19x mas lento) y PyMuPDF
-  (licencia AGPL) en la version 1.1.0.
-- **Lectura del body en memoria**, cortada apenas supera el limite; si el
-  cliente manda `Content-Length`, se rechaza con 413 antes de leer.
+Antes contra despues: la imagen de la v1.2.0 se construye desde su tag con
+`git archive v1.2.0 | docker build -f docker/Dockerfile -t pdf-extractext:antes -`
+y se levanta con `$env:IMAGE_TAG = "antes"; docker compose up -d`.
 
-## Linea base (2026-10-02)
+## Anexo: bitacora de mediciones
+
+Cada medicion en el orden en que se hizo, con las hipotesis que despues se
+corrigieron marcadas como tales.
+
+### Linea base (2026-10-02)
 
 Stack del TP (`docker compose up --build`): 5 replicas con 1 proceso de
-uvicorn cada una. PC con 8 nucleos, Docker Desktop sobre WSL2 (la VM de
-Docker tiene 8 CPUs y 10,6 GB). Spike de k6 con el perfil del profesor
+uvicorn cada una. Notebook con 4 nucleos fisicos y 8 hilos, Docker Desktop
+sobre WSL2 (la VM de Docker tiene 8 CPUs y 10,6 GB). Spike de k6 con el perfil del profesor
 (100 VUs, 10s/20s/10s), PDF como body crudo.
 
 | Corrida | Exito | Throughput (200) | p50 | p90 | p95 | Max |
@@ -39,7 +256,7 @@ Docker tiene 8 CPUs y 10,6 GB). Spike de k6 con el perfil del profesor
 | k6 dentro de la red de Docker, por HTTP | 100 % | 7,75 req/s | 11,06 s | 15,75 s | 16,94 s | 18,68 s |
 | k6 dentro de la red, **1 solo VU** | 100 % | 3,71 req/s | 0,21 s | 0,46 s | 0,69 s | 1,24 s |
 
-### Hallazgo 1: el reenvio de puertos de Docker Desktop distorsiona la medicion
+#### Hallazgo 1: el reenvio de puertos de Docker Desktop distorsiona la medicion
 
 Corriendo k6 desde Windows, el Kanban (8,9 MB) tenia una mediana de 41 s y
 el Scrum Guide (0,3 MB) de 3 s: el tiempo crecia con el **tamano** del
@@ -54,7 +271,7 @@ mismo (~12 s). El cuello de botella era del entorno de medicion, no del
 servicio. El profesor mide en Linux, donde ese reenvio no existe, asi que
 **las mediciones comparables se hacen desde dentro de la red de Docker**.
 
-### Hallazgo 2: con 20 requests concurrentes por replica, cada request cuesta 3 veces mas CPU
+#### Hallazgo 2: con 20 requests concurrentes por replica, cada request cuesta 3 veces mas CPU
 
 > **Corregido en la Fase 2** (ver "Diagnostico"): midiendo el tiempo de CPU
 > del proceso, el costo por request es el mismo con 1, 5 o 20 requests
@@ -83,7 +300,7 @@ mismo GIL y por la misma cuota de 1 CPU. Es exactamente lo que apuntan las
 pistas 2 y 4 de la consigna (control de concurrencia y pool de workers
 separado del runtime HTTP), y es lo primero a atacar en la Fase 2 del plan.
 
-## Fin de la Fase 0 (2026-10-02, version 1.2.0)
+### Fin de la Fase 0 (2026-10-02, version 1.2.0)
 
 Con todos los requisitos de la consigna cumplidos: `/extract` devuelve
 Markdown, 5 replicas sin estado con limites de recursos y ruta directa en
@@ -95,7 +312,7 @@ Traefik. Spike del profesor con k6 dentro de la red de Docker:
 | Linea base (texto plano) | 100 % | 7,75 req/s | 11,06 s | 15,75 s | 16,94 s | 18,68 s |
 | **Fase 0 (Markdown)** | 100 % | 5,80 req/s | 13,99 s | 17,82 s | 18,90 s | 20,88 s |
 
-### Costo del Markdown
+#### Costo del Markdown
 
 El Markdown se arma con una heuristica propia (`app/core/markdown.py`): la
 altura de letra mas frecuente es el cuerpo, y las lineas cortas con letra
@@ -116,15 +333,15 @@ de throughput entre la linea base y la Fase 0 (7,75 -> 5,80 req/s) es mayor
 que ese +22 %: las corridas en Docker Desktop tienen bastante variacion entre
 si, algo a controlar en la Fase 2 repitiendo cada medicion.
 
-### Memoria
+#### Memoria
 
 Pico de memoria por replica durante el spike: entre 363 y 440 MiB. El limite
 de 1 GB deja margen; uno de 512 MB quedaria al borde de que Docker mate el
 contenedor por falta de memoria.
 
-## Fase 2: diagnostico (2026-10-05)
+### Fase 2: diagnostico (2026-10-05)
 
-### Hardware
+#### Hardware
 
 AMD Ryzen 5 3450U de notebook: **4 nucleos fisicos con SMT (8 hilos)**, 2,1 GHz
 base, 22 GB de RAM. Docker Desktop le da 8 CPUs a su VM, pero son 8 hilos de 4
@@ -132,7 +349,7 @@ nucleos: las 5 replicas de "1 CPU", Traefik y el generador de carga compiten
 por 4 nucleos reales. El benchmark del profesor no dice en que hardware se
 midio.
 
-### Linea base de la Fase 2 (version 1.2.0 + Fase 1, k6 dentro de la red)
+#### Linea base de la Fase 2 (version 1.2.0 + Fase 1, k6 dentro de la red)
 
 | Prueba | Exito | Throughput (200) | p50 | p90 | p95 | Max |
 |---|---|---|---|---|---|---|
@@ -148,7 +365,7 @@ mas probable es la imagen en Python 3.14 (antes 3.13), queda para verificar.
 congestion: las replicas siguen procesando requests cuyo cliente ya se fue a
 los 30 s, y ese trabajo se tira mientras los requests nuevos esperan en cola.
 
-### CPU por request segun la concurrencia
+#### CPU por request segun la concurrencia
 
 Una replica sola (1 CPU), 200 requests con k6, tiempo de CPU del proceso leido
 de `/proc`:
@@ -163,7 +380,7 @@ El costo por request **no depende de la concurrencia**: el hallazgo 2 de la
 Fase 0 estaba mal. Una replica procesa ~3 req/s; 5 replicas, ~15 req/s si
 tuvieran 5 nucleos libres, que esta PC no tiene.
 
-### Donde se va el CPU
+#### Donde se va el CPU
 
 - Logs del servidor (`pdf_extraido`), un usuario: la extraccion dura 133 ms
   (Scrum Guide), 191 ms (Lean), 240 ms (Scrum Manager) y 339 ms (Kanban),
@@ -192,9 +409,9 @@ tuvieran 5 nucleos libres, que esta PC no tiene.
    pool de procesos no agregan capacidad: a lo sumo separan el HTTP de la
    extraccion. Hay que medirlo, pero no es donde esta la ganancia.
 
-## Fase 2: experimentos
+### Fase 2: experimentos
 
-### Como se mide
+#### Como se mide
 
 La notebook cambia de frecuencia segun temperatura y energia (de 2,1 a 3,5 GHz):
 la misma imagen dio de 160 a 290 ms de CPU por request en distintos momentos,
@@ -208,7 +425,7 @@ que una comparacion valga:
 - El spike (modelo cerrado) se mide con k6 y la carga fija (modelo abierto) con
   **Vegeta**, los dos dentro de la red de Docker (ver hallazgo 1).
 
-### Error de medicion corregido: la carga fija con k6
+#### Error de medicion corregido: la carga fija con k6
 
 Las primeras mediciones de la carga fija se hicieron con `carga_fija.js` (k6,
 executor de tasa constante). Daban porcentajes de exito inflados: cada usuario
@@ -220,7 +437,7 @@ descartaron. Desde entonces la carga fija se mide con Vegeta 12.13.0 en un
 contenedor (`tests/stress/docker/vegeta.Dockerfile`), y `carga_fija.js` cuenta
 las iteraciones descartadas como fallas y avisa.
 
-### Experimento 1: API cruda de PDFium (F2-8)
+#### Experimento 1: API cruda de PDFium (F2-8)
 
 El perfil mostraba ~10 % del CPU en los envoltorios de pypdfium2 (cada pagina
 y cada pagina de texto es un objeto Python con finalizadores). El bucle de
@@ -236,7 +453,7 @@ Salida identica byte a byte (texto y Markdown de los 4 PDFs). Menos que el 10 %
 del perfil: abrir y cerrar cada pagina hay que hacerlo igual; se ahorra solo
 el envoltorio.
 
-### Experimento 2: compuerta de admision (F2-1 y F2-3)
+#### Experimento 2: compuerta de admision (F2-1 y F2-3)
 
 `app/services/admission.py`, una por proceso:
 
@@ -259,7 +476,7 @@ el envoltorio.
 (unos 20 requests por replica): la mejora viene de no tener 20 hilos peleando
 por el lock de PDFium en cada replica.
 
-#### Como se eligio el criterio de admision
+##### Como se eligio el criterio de admision
 
 La primera version estimaba la espera al llegar (pendientes x tiempo de
 servicio promedio) y rechazaba si superaba el maximo. Problemas encontrados:
@@ -288,7 +505,7 @@ mas trabajo del que entra en el tiempo util: en una corrida todo vencio
 esperando (colapso de una cola FIFO sobrecargada). El spike con cola de 30 sigue
 en 100 % de exito sin ningun 503.
 
-### Experimento 3: estrategia de balanceo de Traefik (F2-5)
+#### Experimento 3: estrategia de balanceo de Traefik (F2-5)
 
 Spike con k6, dos rondas intercaladas:
 
@@ -303,19 +520,19 @@ rapido" es la que esta devolviendo 503, y le manda todavia mas trafico.
 Entre `wrr` y `p2c` la diferencia queda dentro del ruido; se mantiene `wrr`
 (configurable con `LB_STRATEGY`).
 
-### Experimento 4: dos procesos por replica (F2-2)
+#### Experimento 4: dos procesos por replica (F2-2)
 
 Spike con `WEB_CONCURRENCY=2`: 11,02 / 11,32 / 11,61 req/s, igual que con 1
 proceso, y p95 peor (~12,2 s contra ~10 s). Con 1 CPU de limite, dos procesos
 se reparten el mismo nucleo; ademas cada uno tiene su cola, asi que duplica la
 memoria de PDFs en espera. Se mantiene 1 proceso por replica.
 
-### Descartados por medicion (F2-7)
+#### Descartados por medicion (F2-7)
 
 Serializar la respuesta cuesta 0,3-1,5 ms contra 150-300 ms de extraccion
 (menos del 1 %): orjson no justifica una dependencia nueva.
 
-### Experimento 5: cuanto rinde cada replica (2026-10-06)
+#### Experimento 5: cuanto rinde cada replica (2026-10-06)
 
 Carga cerrada constante (`tests/stress/escala.js`, 3 usuarios por replica,
 60 s), variando la cantidad de replicas. El CPU por request sale del cgroup de
@@ -344,7 +561,7 @@ su nucleo a esta velocidad, serian ~28-32 req/s. Es una **proyeccion**, no una
 medicion: supone que el resto de la maquina (proxy y generador de carga) no le
 quita CPU a las replicas, cosa que en esta notebook no pasa.
 
-### Experimento 6: bajar el CPU por request (2026-10-06)
+#### Experimento 6: bajar el CPU por request (2026-10-06)
 
 Desglose en el mismo proceso (los 4 PDFs, 8 repeticiones):
 
@@ -372,7 +589,7 @@ Conclusion: ~85 % del CPU por request esta dentro de PDFium, el motor mas
 rapido de los tres probados, y lo que queda en Python no se puede bajar de
 forma medible. Para esta carga, el CPU por request esta en su piso.
 
-### Experimento 7: limite en la app o en Traefik (F2-4, 2026-10-06)
+#### Experimento 7: limite en la app o en Traefik (F2-4, 2026-10-06)
 
 Traefik trae el middleware `inFlightReq`: limita los requests en vuelo y
 responde 429 al resto. Se comparo con Vegeta (50 req/s, 30 s), dos rondas
@@ -406,7 +623,7 @@ menos memoria en las replicas porque rechaza antes de reenviarles el PDF.
   replica, y la protege tambien cuando se la usa sin este proxy (por ejemplo,
   desde `infrastructure`).
 
-### Estado al cierre de los experimentos
+#### Estado al cierre de los experimentos
 
 | Prueba | Nosotros | Profesor |
 |---|---|---|
@@ -429,9 +646,9 @@ esta disponible para correrlo aca). La comparacion por replica del
 experimento 5 es la mas justa que se puede hacer: con su nucleo propio, una
 replica rinde 5,5-6,4 req/s contra 5,07 del profesor.
 
-## Fase 3: principios (2026-10-06)
+### Fase 3: principios (2026-10-06)
 
-### SLO
+#### SLO
 
 Objetivos de nivel de servicio del stack del TP, cargados en los scripts para
 que una medicion diga sola si se cumplen:
@@ -449,7 +666,7 @@ verificacion: spike con **15,34 req/s, 100 % de exito, p95 7,53 s y maximo
 8,29 s** (p90, p95 y maximo mejores que los del profesor) y Vegeta sin ningun
 timeout.
 
-### Tolerancia a fallos: prueba de caos
+#### Tolerancia a fallos: prueba de caos
 
 `tests/stress/caos.sh` corre el spike y a los 15 s tira una replica. La caida
 se simula matando el proceso con `kill -9` desde fuera del contenedor: un
@@ -487,14 +704,14 @@ se simula matando el proceso con `kill -9` desde fuera del contenedor: un
 | El host de Docker | todo el stack | no se mide: requiere otra maquina |
 | MongoDB (solo en `infrastructure`) | el CRUD; `/extract` sigue funcionando porque `/health` no depende de la base | Fase 1 |
 
-### Apagado y arranque (12-Factor IX)
+#### Apagado y arranque (12-Factor IX)
 
 - Arranque: ~5 s desde `docker run` hasta que `/health` responde (medido con
   `docker exec`, que suma su propia demora). Una replica caida vuelve a estar
   healthy en ~15 s, porque el healthcheck corre cada 5 s.
 - Apagado: ordenado ante SIGTERM, ver la prueba de caos.
 
-### Plan de capacidad
+#### Plan de capacidad
 
 Con los numeros de la Fase 2 (experimentos 5 y 6):
 
@@ -512,7 +729,7 @@ tenga su nucleo. Para mas carga hacen falta mas nucleos: agregar replicas en
 la misma maquina no suma (experimento 5) y la consigna limita a 5. Lo que
 supere la capacidad se rechaza con 503 en vez de vencer por timeout.
 
-### Monitoreo
+#### Monitoreo
 
 Perfil `monitoreo` del compose: Traefik expone metricas Prometheus, Prometheus
 las lee cada 5 s y Grafana muestra el dashboard "TP - POST /extract"
@@ -520,7 +737,7 @@ las lee cada 5 s y Grafana muestra el dashboard "TP - POST /extract"
 reintentos). Es opcional para no sacarle CPU a las replicas al medir. Los logs
 JSON de cada replica son la otra fuente (Fase 1).
 
-### Estabilidad, documentacion y codigo
+#### Estabilidad, documentacion y codigo
 
 - Cada version tiene su tag de git (`v1.0.0` a `v1.3.0`) y su imagen Docker.
 - `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.
@@ -528,19 +745,3 @@ JSON de cada replica son la otra fuente (Fase 1).
 - El motor de extraccion esta detras de la interfaz `PdfExtractor` (TDD:
   `2033abd` en rojo, `e63074a` en verde): los intentos con otros motores de la
   Fase 2 se pueden repetir sin tocar el servicio ni el router.
-
-## Como reproducir
-
-```powershell
-docker compose up --build -d
-docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik /scripts/spike.js
-docker build -t vegeta:12.13.0 -f tests/stress/docker/vegeta.Dockerfile tests/stress/docker
-docker run --rm --network pdf-extractext-tp_default --entrypoint bash -v "${PWD}/tests/stress:/stress" vegeta:12.13.0 /stress/vegeta.sh http://traefik/extract
-# Experimento 5: capacidad con N replicas (3 usuarios por replica)
-docker compose up -d --scale extract=1
-docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scripts:ro" grafana/k6 run -e BASE_URL=http://traefik -e VUS=3 /scripts/escala.js
-# Fase 3: prueba de caos (Git Bash) y monitoreo
-docker compose up -d
-bash tests/stress/caos.sh caida 15
-docker compose --profile monitoreo up -d
-```

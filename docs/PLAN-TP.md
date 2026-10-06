@@ -134,7 +134,7 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 | Fault tolerance | Chaos test: tirar una replica durante el k6. Listar los puntos unicos de falla (Traefik, MongoDB). | Hecho: `caos.sh`, reintentos de Traefik |
 | Performance | SLO escrito (p95, req/s, % de error) y cargado como `thresholds` de k6. | Hecho: `spike.js` y `vegeta.sh` |
 | Monitoring | F1-5. Opcional: Prometheus + Grafana con las metricas de Traefik. | Hecho: perfil `monitoreo` |
-| Documentation | F1-4, diagrama de arquitectura, runbook y ADRs. | Hecho, salvo los ADRs (F4-2) |
+| Documentation | F1-4, diagrama de arquitectura, runbook y ADRs. | Hecho: `docs/RUNBOOK.md` y `docs/decisions/` |
 
 ### 12-Factor
 
@@ -163,12 +163,12 @@ throughput, % de exito, p50/p90/p95/max y CPU/RAM (`docker stats`).
 
 ## Fase 4: entregables
 
-- [ ] **F4-1** Informe: arquitectura y decisiones, cuello de botella, tabla
+- [x] **F4-1** Informe: arquitectura y decisiones, cuello de botella, tabla
   antes/despues de cada experimento, proceso de investigacion y comparacion
   con el benchmark del profesor.
-- [ ] **F4-2** ADRs en `docs/decisions/`: contrato de `/extract`, motor de
+- [x] **F4-2** ADRs en `docs/decisions/`: contrato de `/extract`, motor de
   Markdown, backpressure, workers y replicas.
-- [ ] **F4-3** README con "como reproducir el benchmark" en pocos comandos.
+- [x] **F4-3** README con "como reproducir el benchmark" en pocos comandos.
 
 ## Orden de trabajo
 
