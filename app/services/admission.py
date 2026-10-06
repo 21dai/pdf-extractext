@@ -17,8 +17,9 @@ La compuerta:
 2. Corre una extraccion por vez: los admitidos esperan en un semaforo de
    asyncio (barato) en vez de bloquear un hilo cada uno contra el lock de
    PDFium. El event loop sigue atendiendo HTTP mientras se extrae.
-3. Cuando le toca el turno, si el cliente ya se fue o si el request ya
-   espero mas que `max_wait_seconds` (su tiempo util), no hace el trabajo:
+3. Cuando le toca el turno, si el cliente ya se fue o si el request no
+   llegaria a terminar dentro de `max_wait_seconds` (su tiempo util: lo que
+   ya espero mas el tiempo promedio de una extraccion), no hace el trabajo:
    el primero no tiene a quien responderle y el segundo recibe 503 al
    instante. Asi nunca se gasta CPU en algo que va a vencer.
 """
@@ -48,11 +49,12 @@ class AdmissionGate:
         """Initialize the gate.
 
         Args:
-            max_wait_seconds: Useful life of a request: if it waited longer for
-                its turn, it is rejected without processing it
+            max_wait_seconds: Useful life of a request: if its wait plus an
+                average extraction exceeds it, it is rejected without processing
             max_pending: Requests admitted at the same time (queue size)
             initial_service_seconds: Service time assumed until there are
-                measurements; the average only feeds the Retry-After
+                measurements; the average feeds the useful-life check and the
+                Retry-After
             smoothing: Weight of each new measurement in the moving average;
                 0.05 weighs ~20 extractions, about a whole queue
             clock: Monotonic clock, injectable for tests
@@ -111,14 +113,17 @@ class Ticket:
 
         Raises:
             ClientDisconnectedError: If the client disconnected while waiting.
-            ServiceOverloadedError: If it waited longer than the maximum.
+            ServiceOverloadedError: If it would finish after its useful life.
         """
         gate = self._gate
         async with gate._turn:
             if await is_disconnected():
                 raise ClientDisconnectedError()
             started = gate._clock()
-            if started - self._admitted_at > gate.max_wait_seconds:
+            # El tiempo util cubre la respuesta, no solo la espera: si lo que
+            # espero mas lo que tarda una extraccion se pasa, ya no llega.
+            finish_estimate = started - self._admitted_at + gate.service_seconds
+            if finish_estimate > gate.max_wait_seconds:
                 raise gate._overloaded(gate.pending * gate.service_seconds)
             try:
                 return await work()
