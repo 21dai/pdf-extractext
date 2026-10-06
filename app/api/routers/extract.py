@@ -142,5 +142,7 @@ async def extract(
             return await run_in_threadpool(service.extract, content)
 
         # El body ya se leyo entero: consultar la desconexion no pierde datos.
-        result = await ticket.run(work, request.is_disconnected)
+        # El tamano estima el costo: con la cola por tamano sale primero el
+        # PDF mas liviano.
+        result = await ticket.run(work, request.is_disconnected, cost=len(content))
     return ExtractResponse(content=result.text, page_count=result.page_count)

@@ -14,9 +14,12 @@ La compuerta:
    se vacia mucho mas rapido cuando el ataque termina; una estimacion hecha
    en el momento admitia de menos y dejaba capacidad sin usar. El limite
    tambien acota la memoria de los PDFs que esperan.
-2. Corre una extraccion por vez: los admitidos esperan en un semaforo de
-   asyncio (barato) en vez de bloquear un hilo cada uno contra el lock de
-   PDFium. El event loop sigue atendiendo HTTP mientras se extrae.
+2. Corre una extraccion por vez: los admitidos esperan su turno en asyncio
+   (barato) en vez de bloquear un hilo cada uno contra el lock de PDFium. El
+   event loop sigue atendiendo HTTP mientras se extrae. Con `queue_order`
+   "size", el turno es del PDF mas liviano que espera (sale rapido y no queda
+   detras de uno pesado); el que ya espero `priority_age_seconds` pasa
+   primero, para que ninguno se quede sin turno.
 3. Cuando le toca el turno, si el cliente ya se fue o si el request no
    llegaria a terminar dentro de `max_wait_seconds` (su tiempo util: lo que
    ya espero mas el tiempo promedio de una extraccion), no hace el trabajo:
@@ -25,14 +28,17 @@ La compuerta:
 """
 
 import asyncio
+import itertools
 import math
 import time
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
+from dataclasses import dataclass
+from typing import Literal, TypeVar
 
 from app.core.exceptions import ClientDisconnectedError, ServiceOverloadedError
 
 Result = TypeVar("Result")
+QueueOrder = Literal["fifo", "size"]
 
 
 class AdmissionGate:
@@ -44,6 +50,8 @@ class AdmissionGate:
         max_pending: int,
         initial_service_seconds: float,
         smoothing: float = 0.05,
+        queue_order: QueueOrder = "fifo",
+        priority_age_seconds: float | None = None,
         clock: Callable[[], float] = time.monotonic,
     ):
         """Initialize the gate.
@@ -57,6 +65,9 @@ class AdmissionGate:
                 Retry-After
             smoothing: Weight of each new measurement in the moving average;
                 0.05 weighs ~20 extractions, about a whole queue
+            queue_order: "fifo" (arrival order) or "size" (lightest first)
+            priority_age_seconds: With "size", a request that waited this
+                long goes first; half the useful life if not given
             clock: Monotonic clock, injectable for tests
         """
         self.max_wait_seconds = max_wait_seconds
@@ -65,7 +76,9 @@ class AdmissionGate:
         self.smoothing = smoothing
         self.pending = 0
         self._clock = clock
-        self._turn = asyncio.Semaphore(1)
+        if priority_age_seconds is None:
+            priority_age_seconds = max_wait_seconds / 2
+        self._turn = _Turn(queue_order, priority_age_seconds, clock)
 
     def admit(self) -> "Ticket":
         """Admit a request, or reject it if the queue is full.
@@ -83,6 +96,66 @@ class AdmissionGate:
 
     def _observe(self, seconds: float) -> None:
         self.service_seconds += self.smoothing * (seconds - self.service_seconds)
+
+
+@dataclass(eq=False)
+class _Waiter:
+    cost: float
+    admitted_at: float
+    arrival: int
+    granted: "asyncio.Future[None]"
+
+
+class _Turn:
+    """One extraction at a time, choosing who goes next among those waiting."""
+
+    def __init__(
+        self,
+        order: QueueOrder,
+        priority_age_seconds: float,
+        clock: Callable[[], float],
+    ):
+        self._order = order
+        self._priority_age_seconds = priority_age_seconds
+        self._clock = clock
+        self._busy = False
+        self._waiting: list[_Waiter] = []
+        self._arrivals = itertools.count()
+
+    async def acquire(self, cost: float, admitted_at: float) -> None:
+        if not self._busy:
+            self._busy = True
+            return
+        granted: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        waiter = _Waiter(cost, admitted_at, next(self._arrivals), granted)
+        self._waiting.append(waiter)
+        try:
+            await granted
+        except asyncio.CancelledError:
+            if granted.cancelled():
+                self._waiting.remove(waiter)
+            else:
+                # Le dieron el turno justo cuando lo cancelaban: lo pasa.
+                self.release()
+            raise
+
+    def release(self) -> None:
+        """Give the turn to the next waiter, or leave it free."""
+        while self._waiting:
+            waiter = self._next()
+            self._waiting.remove(waiter)
+            if not waiter.granted.done():  # los cancelados se saltean
+                waiter.granted.set_result(None)
+                return
+        self._busy = False
+
+    def _next(self) -> _Waiter:
+        oldest = min(self._waiting, key=lambda waiter: waiter.arrival)
+        if self._order == "fifo":
+            return oldest
+        if self._clock() - oldest.admitted_at >= self._priority_age_seconds:
+            return oldest
+        return min(self._waiting, key=lambda waiter: (waiter.cost, waiter.arrival))
 
 
 class Ticket:
@@ -108,15 +181,22 @@ class Ticket:
         self,
         work: Callable[[], Awaitable[Result]],
         is_disconnected: Callable[[], Awaitable[bool]],
+        cost: float = 0.0,
     ) -> Result:
         """Wait for the turn and run the work, unless the client already left.
+
+        Args:
+            work: The extraction to run
+            is_disconnected: Tells if the client already left
+            cost: Estimated cost of the work (the PDF size), for size order
 
         Raises:
             ClientDisconnectedError: If the client disconnected while waiting.
             ServiceOverloadedError: If it would finish after its useful life.
         """
         gate = self._gate
-        async with gate._turn:
+        await gate._turn.acquire(cost, self._admitted_at)
+        try:
             if await is_disconnected():
                 raise ClientDisconnectedError()
             started = gate._clock()
@@ -129,3 +209,5 @@ class Ticket:
                 return await work()
             finally:
                 gate._observe(gate._clock() - started)
+        finally:
+            gate._turn.release()

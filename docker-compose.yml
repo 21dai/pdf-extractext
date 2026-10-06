@@ -62,6 +62,8 @@ services:
       # Backpressure: espera maxima con la que se admite un request (ver README).
       EXTRACT_MAX_WAIT_SECONDS: ${EXTRACT_MAX_WAIT_SECONDS:-28}
       EXTRACT_MAX_PENDING: ${EXTRACT_MAX_PENDING:-30}
+      # size: primero el PDF mas liviano; fifo: por orden de llegada.
+      EXTRACT_QUEUE_ORDER: ${EXTRACT_QUEUE_ORDER:-size}
     deploy:
       # Maximo que permite la consigna del TP.
       replicas: 5
