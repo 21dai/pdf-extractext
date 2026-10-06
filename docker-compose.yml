@@ -40,7 +40,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: pdf-extractext:${IMAGE_TAG:-1.2.0}
+    image: pdf-extractext:${IMAGE_TAG:-1.3.0}
     restart: unless-stopped
     environment:
       HOST: 0.0.0.0
