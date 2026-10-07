@@ -13,6 +13,7 @@ from app.core.exceptions import (
     CannotReprocessError,
     ClientDisconnectedError,
     DocumentNotFoundError,
+    DuplicateDocumentError,
     InvalidPdfError,
     PdfTooLargeError,
     PdfUnreadableError,
@@ -110,6 +111,10 @@ def register_problem_details_handlers(app: FastAPI) -> None:
     @app.exception_handler(DocumentNotFoundError)
     async def document_not_found_handler(request: Request, exc: DocumentNotFoundError):
         return await _domain_exception_response(request, exc, status.HTTP_404_NOT_FOUND)
+
+    @app.exception_handler(DuplicateDocumentError)
+    async def duplicate_document_handler(request: Request, exc: DuplicateDocumentError):
+        return await _domain_exception_response(request, exc, status.HTTP_409_CONFLICT)
 
     @app.exception_handler(CannotReprocessError)
     async def cannot_reprocess_handler(request: Request, exc: CannotReprocessError):

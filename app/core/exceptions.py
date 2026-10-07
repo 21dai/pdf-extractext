@@ -34,6 +34,13 @@ class CannotReprocessError(ValueError):
         super().__init__(detail)
 
 
+class DuplicateDocumentError(Exception):
+    """A document with the same content (checksum) already exists: 409."""
+
+    def __init__(self) -> None:
+        super().__init__("Ya existe un documento con el mismo checksum")
+
+
 class InvalidPdfError(ValueError):
     """Raised when the uploaded content is empty or is not a PDF."""
 

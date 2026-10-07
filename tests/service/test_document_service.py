@@ -7,6 +7,7 @@ writing raw documents into the database.
 
 import pytest
 
+from app.core.exceptions import DuplicateDocumentError
 from app.repositories import DocumentRepository
 from app.schemas import DocumentUpdate
 from app.services import DocumentService
@@ -76,7 +77,7 @@ def test_create_document_rejects_duplicate_checksum(service: DocumentService):
     """Test creating a document rejects content already stored."""
     service.create_document("Original", "original.pdf", MINIMAL_PDF_BYTES)
 
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(DuplicateDocumentError) as error:
         service.create_document("Duplicado", "duplicado.pdf", MINIMAL_PDF_BYTES)
 
     assert str(error.value) == "Ya existe un documento con el mismo checksum"

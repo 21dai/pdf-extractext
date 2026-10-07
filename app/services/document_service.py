@@ -3,7 +3,11 @@
 from typing import List, Optional
 
 from app.core import validators as v
-from app.core.exceptions import CANNOT_REPROCESS_MESSAGE, CannotReprocessError
+from app.core.exceptions import (
+    CANNOT_REPROCESS_MESSAGE,
+    CannotReprocessError,
+    DuplicateDocumentError,
+)
 from app.core.pdf_extraction import extract_pdf_text
 from app.models import Document
 from app.repositories import DocumentRepository
@@ -44,7 +48,7 @@ class DocumentService:
         checksum = v.calculate_checksum(file_content)
 
         if self.repository.get_by_checksum(checksum):
-            raise ValueError("Ya existe un documento con el mismo checksum")
+            raise DuplicateDocumentError()
 
         extracted_text = extract_pdf_text(file_content)
         document = Document(

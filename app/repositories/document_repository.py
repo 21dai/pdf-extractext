@@ -5,7 +5,9 @@ from typing import Any, List, Optional
 
 from pymongo import ReturnDocument
 from pymongo.database import Database
+from pymongo.errors import DuplicateKeyError
 
+from app.core.exceptions import DuplicateDocumentError
 from app.models import Document, utcnow
 
 
@@ -41,7 +43,12 @@ class DocumentRepository:
             }
         )
         payload = self._serialize(created_document)
-        self.collection.insert_one(payload)
+        try:
+            self.collection.insert_one(payload)
+        except DuplicateKeyError as exc:
+            # Dos uploads iguales a la vez pasan los dos la busqueda por
+            # checksum; el indice unico frena al segundo.
+            raise DuplicateDocumentError() from exc
         return created_document
 
     def get_by_id(self, document_id: int) -> Optional[Document]:
