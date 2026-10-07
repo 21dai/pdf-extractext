@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Request, status
 from starlette.concurrency import run_in_threadpool
 
+from app.api.dependencies import get_admission_gate
 from app.api.uploads import form_file, is_multipart, multipart_form, read_raw_body
 from app.config import settings
 from app.core.pdf_extraction import PdfExtraction
@@ -21,11 +22,6 @@ _PROBLEM = {"description": "Problem details (RFC 9457)"}
 def get_extraction_service() -> ExtractionService:
     """Dependency to obtain the extraction service."""
     return ExtractionService(max_pdf_size_bytes=settings.max_pdf_size_bytes)
-
-
-def get_admission_gate(request: Request) -> AdmissionGate:
-    """Dependency to obtain the admission gate of this process."""
-    return request.app.state.admission_gate
 
 
 @router.post(

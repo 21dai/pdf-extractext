@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pymongo.database import Database
 from starlette.concurrency import run_in_threadpool
 
+from app.api.dependencies import get_admission_gate
 from app.api.uploads import (
     form_file,
     form_text,
@@ -24,6 +25,7 @@ from app.core.validators import MAX_PAGINATION_LIMIT
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
 from app.services import DocumentService
+from app.services.admission import AdmissionGate
 from app.utils.database import get_db
 
 router = APIRouter(prefix="/documents", tags=["documentos"])
@@ -76,24 +78,37 @@ def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
 async def create_document(
     request: Request,
     service: DocumentService = Depends(get_document_service),
+    gate: AdmissionGate = Depends(get_admission_gate),
 ) -> DocumentResponse:
     """Create a new document from an uploaded PDF.
 
-    El PDF se lee en memoria y con limite de tamano. Los errores del PDF
-    (400, 413, 422) los traducen los handlers RFC 9457; el resto de las
-    validaciones del service responde 400.
+    El PDF se lee en memoria y con limite de tamano. Comparte la compuerta de
+    admision con /extract: si la cola esta llena responde 503 con
+    Retry-After antes de leer el PDF. Los errores del PDF (400, 413, 422) los
+    traducen los handlers RFC 9457; el resto de las validaciones del service
+    responde 400.
     """
     if not is_multipart(request):
         raise missing_field("file")  # sin multipart no puede venir el archivo
-    async with multipart_form(request, service.max_pdf_size_bytes) as form:
-        name = form_text(form, "name")
-        content, filename = await form_file(form, "file")
-    try:
-        return await run_in_threadpool(service.create_document, name, filename, content)
-    except InvalidPdfError, PdfTooLargeError, PdfUnreadableError:
-        raise
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    with gate.admit() as ticket:
+        async with multipart_form(request, service.max_pdf_size_bytes) as form:
+            name = form_text(form, "name")
+            content, filename = await form_file(form, "file")
+        ticket.body_received()
+
+        async def work() -> DocumentResponse:
+            return await run_in_threadpool(
+                service.create_document, name, filename, content
+            )
+
+        try:
+            return await ticket.run(work, request.is_disconnected, cost=len(content))
+        except InvalidPdfError, PdfTooLargeError, PdfUnreadableError:
+            raise
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            )
 
 
 @router.get(
