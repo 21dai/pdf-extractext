@@ -39,7 +39,12 @@ Verificacion: CPU por request de una replica sola, 1.3.3 contra 1.3.4
 alternadas (3 rondas): mediana 214 contra 206 ms. Las correcciones no le
 agregan costo a `/extract`.
 
-## Fase B: arquitectura y codigo
+## Fase B: arquitectura y codigo - HECHA (1.4.0)
+
+B1 en la fase A; B2 `1dd0224`, B3 `58f2c21`, B4 `c754e25`, B5 `ebf9092` y
+`2a7d073` (Prometheus y Grafana), todos con TDD. B6: el orquestador no usa
+`file_path`, pero esta en la respuesta de la API; quitarlo es un cambio
+incompatible y queda para decidirlo con el equipo.
 
 | # | Que mejorar | Por que |
 |---|---|---|
@@ -53,7 +58,14 @@ agregan costo a `/extract`.
 Tiempo estimado: **4-5 horas**. Version resultante: 1.4.0 (B5 agrega un
 endpoint).
 
-## Fase C: estructura, herramientas y CI
+## Fase C: estructura, herramientas y CI - HECHA (1.4.0)
+
+C1 y C3 `8027633`: la auditoria encontro 25 vulnerabilidades conocidas en
+starlette, python-multipart, pymongo, anyio, idna y pydantic-settings, que se
+actualizaron en `f29c292` junto con quitar dos dependencias sin uso. C2
+`3ea9c64`, C4 `368fe91`, C5 `9db7741` (README de 697 a ~380 lineas) y C6
+`7c09bbd`: el healthcheck gastaba 12 % de un nucleo por replica; el liviano
+cada 10 s, ~3 %.
 
 | # | Que mejorar | Por que |
 |---|---|---|
@@ -66,7 +78,14 @@ endpoint).
 
 Tiempo estimado: **3-4 horas**.
 
-## Fase D: rendimiento del TP
+## Fase D: rendimiento del TP - HECHA, salvo D4 y la medicion de D6
+
+D1 `d0e46df` (mas liviano primero con limite de 7,5 s, por defecto), D3
+`a96e3ee` (`benchmark.ps1 -Navegador`), D5 en el informe (experimentos 14 a
+17) y D6 `ee533b1` (reserva para la respuesta lo que tardo en llegar el PDF).
+La medicion A/B de D1 y D6 con 5 replicas se corto: un servidor de
+TypeScript de otro proyecto usaba mas de un nucleo entero de la notebook.
+D4 depende de conseguir una PC con mas nucleos.
 
 | # | Que hacer | Evidencia |
 |---|---|---|
