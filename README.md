@@ -626,6 +626,7 @@ Convenciones vigentes:
 - `docs/DEMO.md`: guion para mostrar la API y el TP en clase.
 - `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.
 - `docs/MEJORAS-RENDIMIENTO.md`: que mas se puede hacer para superar al profesor, con tiempos estimados.
+- `docs/PLAN-MEJORAS.md`: plan por fases para mejorar el proyecto completo y el TP.
 - `tests/stress/README.md`: como correr las pruebas de carga del TP.
 
 ## Limitacion conocida
