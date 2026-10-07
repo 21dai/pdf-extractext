@@ -1,8 +1,10 @@
 # Pipeline de calidad. Corre en cada push a main y en cada PR:
 #   1. formato y lint (black, isort, flake8) y tipos (mypy)
-#   2. tests (pytest, con mongomock: no necesita MongoDB)
+#   2. tests (pytest, con mongomock: no necesita MongoDB) con cobertura minima
+#      del 95 % del paquete app
 #   3. build de la imagen Docker y smoke test de /health y POST /extract
 #   4. escaneo de secretos en el historial (trufflehog)
+#      y vulnerabilidades conocidas en las dependencias (pip-audit)
 #   5. convencion de commits en PRs: tipo(#N): descripcion, con (#N) opcional
 name: CI
 
@@ -30,8 +32,8 @@ jobs:
         run: uv run flake8 app tests main.py
       - name: mypy
         run: uv run mypy app main.py
-      - name: pytest
-        run: uv run pytest -q
+      - name: pytest con cobertura
+        run: uv run pytest -q --cov=app --cov-report=term-missing --cov-fail-under=95
 
   docker:
     name: Build Docker y smoke test
@@ -67,6 +69,17 @@ jobs:
       - uses: trufflesecurity/trufflehog@main
         with:
           extra_args: --only-verified
+
+  dependencias:
+    name: Vulnerabilidades en las dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - name: pip-audit sobre las versiones exactas del uv.lock
+        run: |
+          uv export --no-hashes --no-dev --no-emit-project --format requirements-txt -o requirements.txt
+          uvx pip-audit -r requirements.txt --no-deps --disable-pip
 
   commits:
     name: Convencion de commits
