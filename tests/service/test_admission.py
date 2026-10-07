@@ -267,6 +267,36 @@ class TestUsefulLife:
         assert gate.service_deviation_seconds == pytest.approx(1.0)
         assert calls == 0
 
+    def test_the_upload_time_is_also_reserved_for_the_answer(self):
+        """The way back costs like the way in.
+
+        La compuerta no ve el envio de la respuesta, pero si cuanto tardo en
+        llegar el PDF: con la maquina saturada las dos cosas tardan. Sin esto
+        volvian los timeouts en Vegeta (2 a 55 por corrida con la CPU lenta).
+        """
+        now = [0.0]
+        gate = make_gate(
+            max_wait_seconds=10.0,
+            initial_service_seconds=0.5,
+            clock=lambda: now[0],
+        )
+        calls = 0
+
+        async def work():
+            nonlocal calls
+            calls += 1
+
+        async def scenario():
+            with gate.admit() as ticket:
+                now[0] += 3.0  # el PDF tardo 3 s en llegar
+                ticket.body_received()
+                now[0] += 4.0  # 7 + 0,5 <= 10, pero 7 + 0,5 + 3 > 10
+                await ticket.run(work, connected)
+
+        with pytest.raises(ServiceOverloadedError):
+            run(scenario())
+        assert calls == 0
+
 
 class TestServiceTimeEstimate:
     def test_a_single_slow_extraction_barely_moves_the_estimate(self):
