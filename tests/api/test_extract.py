@@ -1,6 +1,5 @@
 """Tests for POST /extract, the stateless extraction contract of the TP."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -104,15 +103,6 @@ class TestExtractIsStateless:
 
 class TestExtractKeepsUploadsInMemory:
     """Pista 1 de la consigna: leer el PDF sin volcarlo a disco."""
-
-    @pytest.fixture
-    def disk_forbidden(self, monkeypatch: pytest.MonkeyPatch):
-        """Fail if an upload is moved from memory to a temporary file on disk."""
-
-        def rollover(self):
-            raise AssertionError("el upload se escribio en un archivo temporal")
-
-        monkeypatch.setattr(tempfile.SpooledTemporaryFile, "rollover", rollover)
 
     @pytest.mark.usefixtures("disk_forbidden")
     def test_multipart_pdf_bigger_than_one_megabyte_stays_in_memory(

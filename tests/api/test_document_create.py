@@ -1,7 +1,11 @@
 """Tests for document creation endpoints."""
 
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from tests.support.api_documents import (
     assert_created_document,
     create_document_response,
@@ -79,7 +83,7 @@ def test_create_document_rejects_pdf_larger_than_configured_limit(db):
     with TestClient(app) as client:
         response = create_document_response(client, name="Too Large")
 
-        assert response.status_code == 400
+        assert response.status_code == 413
 
         error_body = response.json()
         assert "El PDF supera el tamano maximo permitido" in error_body["detail"]
@@ -128,3 +132,51 @@ def test_create_document_allows_same_filename_when_content_differs(
     first_document = first_response.json()
     second_document = second_response.json()
     assert second_document["checksum"] != first_document["checksum"]
+
+
+STRESS_PDFS = Path(__file__).resolve().parents[1] / "stress" / "pdfs"
+
+
+@pytest.mark.usefixtures("disk_forbidden")
+def test_create_document_keeps_uploads_bigger_than_one_megabyte_in_memory(
+    client: TestClient,
+):
+    """Requisito 8: el PDF no se escribe a disco mientras se procesa.
+
+    Starlette pasa a un archivo temporal las partes de mas de 1 MB.
+    """
+    source = STRESS_PDFS / "scrum_manager_historias_usuario.pdf"  # 3,8 MB
+
+    response = create_document_response(
+        client, name="Grande", filename="grande.pdf", content=source.read_bytes()
+    )
+
+    assert response.status_code == 201
+
+
+def test_create_document_rejects_declared_size_over_limit_before_reading(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """With Content-Length over the limit the upload is rejected with 413."""
+    monkeypatch.setattr(settings, "max_pdf_size_bytes", 1024)
+    big_pdf = build_pdf_bytes("x" * 10) + b"%" * 200_000
+
+    response = create_document_response(client, name="Enorme", content=big_pdf)
+
+    assert response.status_code == 413
+    assert response.headers["content-type"] == "application/problem+json"
+
+
+def test_create_document_without_file_returns_422(client: TestClient):
+    response = client.post("/api/v1/documents", data={"name": "Sin archivo"})
+
+    assert response.status_code == 422
+
+
+def test_create_document_without_name_returns_422(client: TestClient):
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("a.pdf", MINIMAL_PDF_BYTES, "application/pdf")},
+    )
+
+    assert response.status_code == 422

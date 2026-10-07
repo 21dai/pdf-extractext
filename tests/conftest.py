@@ -1,5 +1,7 @@
 """Pytest configuration and fixtures."""
 
+import tempfile
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -29,3 +31,13 @@ def client(db):
 
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def disk_forbidden(monkeypatch):
+    """Fail if an upload is moved from memory to a temporary file on disk."""
+
+    def rollover(self):
+        raise AssertionError("el upload se escribio en un archivo temporal")
+
+    monkeypatch.setattr(tempfile.SpooledTemporaryFile, "rollover", rollover)
