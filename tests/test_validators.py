@@ -241,3 +241,32 @@ class TestPdfValidationErrorTypes:
     def test_missing_signature_raises_invalid_pdf(self):
         with pytest.raises(InvalidPdfError):
             validate_pdf_signature(b"this is not a pdf")
+
+
+class TestValidationErrorsAreDomainErrors:
+    """Document validations raise a domain error that the API maps to 400.
+
+    Antes eran ValueError genericos y el router del CRUD los atrapaba para
+    responder 400: un ValueError por un bug tambien terminaba como 400.
+    """
+
+    @pytest.mark.parametrize(
+        "validacion",
+        [
+            lambda: validate_document_name("   "),
+            lambda: validate_original_filename(None),
+            lambda: validate_pdf_extension("archivo.txt"),
+            lambda: validate_pagination(-1, 10),
+        ],
+    )
+    def test_raises_document_validation_error(self, validacion):
+        from app.core.exceptions import DocumentValidationError
+
+        with pytest.raises(DocumentValidationError):
+            validacion()
+
+    def test_is_still_a_value_error(self):
+        """Compatibilidad: quien atrapaba ValueError sigue funcionando."""
+        from app.core.exceptions import DocumentValidationError
+
+        assert issubclass(DocumentValidationError, ValueError)
