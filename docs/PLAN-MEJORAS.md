@@ -35,6 +35,10 @@ A1 y A2 (`9612959`), A3 (`e3f80c6`), A4 (`640816e`) y A5 (`6d57a28`). La
 lectura de uploads quedo en `app/api/uploads.py`, compartida por los dos
 routers: eso adelanta la tarea B1.
 
+Verificacion: CPU por request de una replica sola, 1.3.3 contra 1.3.4
+alternadas (3 rondas): mediana 214 contra 206 ms. Las correcciones no le
+agregan costo a `/extract`.
+
 ## Fase B: arquitectura y codigo
 
 | # | Que mejorar | Por que |
@@ -70,6 +74,7 @@ Tiempo estimado: **3-4 horas**.
 | D2 | Decidir el valor por defecto de D1. | Ayuda con un nucleo por replica (la maquina del profesor); en la notebook del grupo, con 5 replicas, no (la espera tipica ya supera el limite). |
 | D3 | Opcion `-Navegador` en `benchmark.ps1`: dashboard de k6 en vivo y reporte HTML del spike. | Ya probado a mano: `K6_WEB_DASHBOARD` funciona dentro del contenedor. |
 | D4 | Medir en una PC con 8 nucleos o mas (de un integrante o del laboratorio). | Es lo unico que puede confirmar el throughput: con la velocidad por nucleo de la notebook la proyeccion es ~21 req/s. |
+| D6 | Que el tiempo util no dependa del estado de la maquina. | Con la notebook muy lenta (spike de 6-9 req/s) volvieron los timeouts en Vegeta con la 1.3.3 y la 1.3.4: 2, 7, 13 y 55 por corrida. El margen de 4 desvios se adapta a la extraccion, pero no a lo que pasa fuera de la compuerta (subir el PDF y devolver la respuesta con la CPU saturada). Medir ese tramo y sumarlo, o achicar la cola cuando la maquina va lenta. |
 | D5 | Informe y ADRs con los experimentos 14 en adelante (emulacion a escala, keep-alive, cola por tamano con limite corto). | El proceso de investigacion es lo que la consigna pide para el puntaje extra. |
 
 Tiempo estimado: **3 horas** sin D4.
