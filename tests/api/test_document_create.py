@@ -103,7 +103,8 @@ def test_create_document_rejects_duplicate_document_checksum(client: TestClient)
     )
 
     assert first_response.status_code == 201
-    assert second_response.status_code == 400
+    assert second_response.status_code == 409
+    assert second_response.headers["content-type"] == "application/problem+json"
 
     error_body = second_response.json()
     assert error_body["detail"] == "Ya existe un documento con el mismo checksum"
@@ -180,3 +181,24 @@ def test_create_document_without_name_returns_422(client: TestClient):
     )
 
     assert response.status_code == 422
+
+
+def test_duplicate_detected_by_the_unique_index_returns_409(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+):
+    """Two equal uploads at the same time: both pass the lookup by checksum.
+
+    El segundo lo frena el indice unico de MongoDB (DuplicateKeyError): tiene
+    que responder 409 como cualquier duplicado, no 500.
+    """
+    from app.repositories import DocumentRepository
+
+    monkeypatch.setattr(DocumentRepository, "get_by_checksum", lambda self, c: None)
+    first_response = create_document_response(client, name="Uno", filename="a.pdf")
+    second_response = create_document_response(client, name="Dos", filename="b.pdf")
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == (
+        "Ya existe un documento con el mismo checksum"
+    )
