@@ -16,7 +16,7 @@ excede el tiempo util de vida.
 
 `AdmissionGate` (`app/services/admission.py`), una por proceso:
 
-1. **Cola acotada por cantidad**: hasta `EXTRACT_MAX_PENDING` = 30 requests
+1. **Cola acotada por cantidad**: hasta `EXTRACT_MAX_PENDING` = 60 requests
    admitidos. Llena, el siguiente recibe `503` con `Retry-After` al instante,
    sin leer el PDF.
 2. **Una extraccion por vez** en un semaforo de asyncio: los admitidos esperan
@@ -27,7 +27,10 @@ excede el tiempo util de vida.
    `503` sin procesarse. Hasta la 1.3.0 solo contaba la espera: con la
    maquina lenta, requests que empezaban cerca de los 28 s terminaban despues
    de los 30 s (1 y 19 timeouts en dos corridas). Desde la 1.3.1 cuenta
-   tambien la extraccion (0 timeouts).
+   tambien la extraccion, y desde la 1.3.2 con un margen pesimista: el
+   promedio mas 4 desvios, como el temporizador de retransmision de TCP
+   (RFC 6298), porque con la maquina saturada un PDF grande tarda varias
+   veces el promedio.
 
 ## Alternativas medidas
 
@@ -36,7 +39,9 @@ excede el tiempo util de vida.
 | Sin limite (linea base) | colapso, cientos de timeouts | trabajo desperdiciado |
 | Estimar la espera al llegar (EWMA) | 57-141 timeouts | estima mal durante el ataque; llego a rechazar 1 request en el spike |
 | Cola de 100 | 7,7 % de exito en una corrida, 985 timeouts | guarda mas trabajo del que entra en el tiempo util |
-| Cola de 30 | 0 timeouts, p50 ~0,1 s, ~390 MiB | elegida |
+| Cola de 30 | 0 timeouts, p50 ~0,1 s, ~390 MiB | elegida hasta la 1.3.1 |
+| Cola de 60 con margen de 4 desvios | ~30 % de exito, 0 timeouts, ~510 MiB | elegida desde la 1.3.2 |
+| Cola de 90 con margen de 4 desvios | 1 y 72 timeouts | guarda mas de lo que entra en 28 s |
 | Cola por tamano (el PDF mas liviano primero) | spike: throughput -12 %, p95 de 12 a 17 s; Vegeta igual | los grandes se acumulan; revertida |
 | `inFlightReq` de Traefik (150, responde 429) | empate en exito, 0 timeouts | numero fijo sin tiempo util, 429 sin `Retry-After`, limite global y no por replica |
 
@@ -48,6 +53,6 @@ excede el tiempo util de vida.
 - La memoria por replica queda acotada (PDFs en espera).
 - El porcentaje de exito de Vegeta lo pone la capacidad (req/s), no la cola:
   con mas nucleos sube solo.
-- 30 depende del costo por PDF de este set: si cambian los PDFs hay que
+- 60 depende del costo por PDF de este set: si cambian los PDFs hay que
   revisarlo (el tiempo util protege igual, pero una cola demasiado larga
   vuelve a desperdiciar trabajo).

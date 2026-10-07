@@ -41,7 +41,7 @@ flowchart LR
     C[k6 / Vegeta] -->|POST /extract| T[Traefik v3<br/>round robin + reintentos]
     T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
     subgraph Replica [dentro de cada replica]
-        G[AdmissionGate<br/>cola de 30, tiempo util 28 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
+        G[AdmissionGate<br/>cola de 60, tiempo util 28 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
     end
     R --> G
 ```
@@ -50,7 +50,7 @@ flowchart LR
 |---|---|---|
 | `/extract` sin estado, sin base de datos | replicas intercambiables (12-Factor VI); se pueden escalar y reintentar | [0001](decisions/0001-contrato-de-extract.md) |
 | PDFium con su API cruda + Markdown por altura de letra | el motor mas rapido de los medidos, licencia Apache/BSD | [0002](decisions/0002-motor-de-extraccion-y-markdown.md) |
-| Cola de 30 por replica, tiempo util de 28 s, `503` con `Retry-After` | no gastar CPU en requests que van a vencer | [0003](decisions/0003-contrapresion.md) |
+| Cola de 60 por replica, tiempo util de 28 s, `503` con `Retry-After` | no gastar CPU en requests que van a vencer | [0003](decisions/0003-contrapresion.md) |
 | 5 replicas de 1 CPU, 1 proceso cada una, round robin | el CPU es el limite; mas procesos por replica no suman | [0004](decisions/0004-workers-y-replicas.md) |
 | Reinicio automatico, reintentos de Traefik, apagado ordenado | una replica caida no tira el servicio | [0005](decisions/0005-tolerancia-a-fallos.md) |
 | Medir dentro de la red de Docker, con Vegeta real, intercalando | numeros comparables y repetibles | [0006](decisions/0006-metodologia-de-medicion.md) |
@@ -128,6 +128,7 @@ Efecto de cada cambio, medido por separado (detalle en el anexo):
 | Apagado ordenado con 35 s de gracia | 0 requests perdidos al apagar una replica | si |
 | Tiempo util que cuenta la extraccion (1.3.1) | Vegeta: de 19 timeouts a 0 con la maquina lenta | si |
 | Cola por tamano (el PDF mas liviano primero) | spike -12 % de throughput y p95 de 12 a 17 s | no |
+| Cola de 60 con margen de 4 desvios en el tiempo util | Vegeta: de ~22 % a ~30 % de exito, 0 timeouts | si |
 
 ## 5. Proceso de investigacion
 
@@ -797,3 +798,35 @@ acumulan detras de los chicos hasta que el limite de edad los hace pasar: la
 cola termina funcionando como por llegada pero con los grandes mas
 atrasados. Se revirtio (`083fdbb`, `4a89033`); el codigo vuelve a ser el de
 la 1.3.1.
+
+### Experimento 9: cola mas larga con un margen por desvio (2026-10-07)
+
+Con el tiempo util exacto de la 1.3.1, una cola mas larga deberia completar
+mas requests en Vegeta sin producir timeouts. Primera tanda (1.3.1, Vegeta,
+dos rondas intercaladas):
+
+| Cola | Exito | Timeouts |
+|---|---|---|
+| 30 | 18,9 / 25,2 % | **4** / 0 |
+| 45 | 29,5 / 32,3 % | 0 / 0 |
+| 60 | 32,7 / 35,7 % | 0 / 0 |
+| 60 (otra tanda) | 27,5 / 20,7 % | 0 / **6** |
+| 90 | 20,6 / 31,1 % | **215 / 40** |
+| 120 | 32,5 / 32,4 % | **77 / 162** |
+
+La cola mas larga sube el exito, pero el chequeo con el tiempo **promedio**
+de extraccion no alcanza: con la maquina saturada un PDF grande tarda varias
+veces el promedio y vence igual. Se cambio el margen por el del temporizador
+de retransmision de TCP (RFC 6298): promedio + 4 desvios, los dos promedios
+moviles (TDD: `aa4138f` en rojo, `699eec2` en verde). Con ese margen:
+
+| Cola | Exito | Timeouts | Memoria pico |
+|---|---|---|---|
+| 45 | 28,7 / 28,9 % | 0 / 0 | ~420 MiB |
+| **60** | **30,8 / 30,3 %** | **0 / 0** | ~510 MiB |
+| 90 | 31,5 / 30,7 % | 1 / **72** | ~610 MiB |
+
+Se fijo la cola en **60 por replica**: mas exito que con 30 (~22 % de
+mediana en las mediciones anteriores) sin timeouts y con la mitad del limite
+de memoria. Con 90 la ganancia es minima y los timeouts vuelven. En el spike
+la cola no influye: hay ~20 requests por replica y nunca se llena.

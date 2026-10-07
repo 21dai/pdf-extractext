@@ -187,7 +187,7 @@ Vegeta) se sigue en [PLAN-TP.md](PLAN-TP.md) y sus mediciones en
 | Script de k6 para el spike | `tests/stress/spike.js` (perfil del profesor, SLO como thresholds) |
 | Script de Vegeta para la carga fija | `tests/stress/vegeta.sh` y `vegeta.ps1` |
 | Pista 1: extraer sin disco ni buffers duplicados | body y multipart en memoria (test que falla si algo va a disco); PDFium lee de los bytes |
-| Pista 2: backpressure con 429/503 | cola de 30 y tiempo util de 28 s, `503` con `Retry-After` ([ADR 0003](decisions/0003-contrapresion.md)) |
+| Pista 2: backpressure con 429/503 | cola de 60 y tiempo util de 28 s, `503` con `Retry-After` ([ADR 0003](decisions/0003-contrapresion.md)) |
 | Pista 3: replicas detras de un reverse proxy | Traefik con round robin y reintentos |
 | Pista 4: separar HTTP de la extraccion | endpoint async; extraccion en el threadpool, una por vez |
 | Twelve-Factor: config, port binding, sin estado, logs a stdout | informe, seccion 2 |
