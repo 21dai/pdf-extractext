@@ -252,7 +252,7 @@ MAX_PDF_SIZE_BYTES=10485760
 DOCUMENTS_API_ENABLED=true
 # Backpressure de POST /extract: tiempo util de un request (espera + extraccion);
 # si no llega a terminar a tiempo, 503 sin procesarlo. Menor que el timeout de los clientes.
-EXTRACT_MAX_WAIT_SECONDS=28
+EXTRACT_MAX_WAIT_SECONDS=25
 # Requests de /extract admitidos a la vez por proceso (la cola); llena, 503.
 EXTRACT_MAX_PENDING=60
 
@@ -405,7 +405,7 @@ responde `200`:
 - Backpressure: cada proceso admite hasta `EXTRACT_MAX_PENDING` (60) requests a
   la vez; con la cola llena responde `503` con `Retry-After` al instante, sin leer
   el PDF. Un request que no llegaria a terminar dentro de `EXTRACT_MAX_WAIT_SECONDS`
-  (28 s, contando lo que espero mas una extraccion promedio) tambien recibe `503`
+  (25 s, contando lo que espero mas una extraccion pesimista) tambien recibe `503`
   sin procesarse: nunca se gasta CPU en algo que va a vencer.
 
 ```powershell

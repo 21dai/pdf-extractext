@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # espero mas una extraccion promedio lo supera, se responde 503 sin
     # procesarlo. Tiene que quedar por debajo del timeout de los clientes
     # (30 s en el TP).
-    extract_max_wait_seconds: float = 28.0
+    extract_max_wait_seconds: float = 25.0
     # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
     # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.
     extract_max_pending: int = 60
