@@ -129,6 +129,9 @@ Efecto de cada cambio, medido por separado (detalle en el anexo):
 | Tiempo util que cuenta la extraccion (1.3.1) | Vegeta: de 19 timeouts a 0 con la maquina lenta | si |
 | Cola por tamano (el PDF mas liviano primero) | spike -12 % de throughput y p95 de 12 a 17 s | no |
 | Cola de 60 con margen de 4 desvios en el tiempo util | Vegeta: de ~22 % a ~30 % de exito, 0 timeouts | si |
+| pypdfium2 5.14, ajustes del recolector de basura | dentro del ruido | no |
+| HAProxy en lugar de Traefik | mismo CPU, spike igual o peor, 28-49 timeouts en Vegeta | no |
+| 3 o 4 replicas en lugar de 5 | spike 12-13 req/s contra 14,3-14,5 | no |
 
 ## 5. Proceso de investigacion
 
@@ -830,3 +833,44 @@ Se fijo la cola en **60 por replica**: mas exito que con 30 (~22 % de
 mediana en las mediciones anteriores) sin timeouts y con la mitad del limite
 de memoria. Con 90 la ganancia es minima y los timeouts vuelven. En el spike
 la cola no influye: hay ~20 requests por replica y nunca se llena.
+
+### Experimento 10: lo que quedaba para el CPU por request (2026-10-07)
+
+Medido en el mismo contenedor de 1 CPU, alternando:
+
+| Intento | Resultado | Decision |
+|---|---|---|
+| pypdfium2 5.14.0 (PDFium mas nuevo) contra 5.8.0 | mediana 148 contra 152 ms por PDF, gana 4 de 6 pares, misma salida byte a byte | dentro del ruido: no se cambia |
+| Recolector de basura de Python (umbral alto o apagado) | 3 recolecciones por PDF; 146-151 ms contra 150-153 ms | sin efecto |
+
+Con esto el CPU por request queda en su piso: PDFium y lo minimo de Python.
+
+### Experimento 11: HAProxy en lugar de Traefik (2026-10-07)
+
+Hipotesis: un proxy escrito en C le devuelve CPU a las replicas. Primero se
+midio cuanto usa el proxy a mitad del spike: **Traefik ~17-28 % de un nucleo
+y k6 ~15-36 %**. HAProxy 3.2 con round robin, `retries 3`, `option
+redispatch` y chequeo de `/health`, mismas replicas, dos rondas intercaladas:
+
+| Proxy | Spike req/s | Spike p95 | Vegeta exito | Vegeta timeouts | CPU del proxy |
+|---|---|---|---|---|---|
+| Traefik | 13,53 / 13,66 | 8,99 / 9,61 s | 27,7 / 33,5 % | **0 / 0** | 23 / 28 % |
+| HAProxy | 11,59 / 13,07 | 10,41 / 9,07 s | 30,1 / 33,7 % | **49 / 28** | 22 / 17 % |
+
+HAProxy gasta casi lo mismo y en Vegeta deja vencer requests. Se mantiene
+Traefik. (Una primera tanda se descarto porque quedaron dos scripts de
+medicion corriendo a la vez y se pisaron los stacks.)
+
+### Experimento 12: cuantas replicas para el spike (2026-10-07)
+
+En el experimento 5, con carga constante, 3 o 4 replicas rendian igual que
+5 en la notebook. Con el spike del profesor, dos rondas intercaladas:
+
+| Replicas | req/s | p50 | p95 | max |
+|---|---|---|---|---|
+| 3 | 12,06 / 11,44 | 7,50 / 7,09 s | 9,14 / 9,69 s | 10,09 / 10,10 s |
+| 4 | 13,15 / 13,09 | 6,62 / 6,20 s | 8,38 / 8,92 s | 10,08 / 10,04 s |
+| **5** | **14,49 / 14,27** | **5,97 / 5,77 s** | **7,81 / 8,36 s** | **8,71 / 9,73 s** |
+
+Con el spike, 5 replicas es lo mejor, y el p95 queda por debajo del del
+profesor (8,80 s). Se mantienen 5.

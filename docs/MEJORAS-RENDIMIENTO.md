@@ -54,18 +54,19 @@ La variacion entre corridas es de hasta 2 veces con el mismo codigo.
 - Ganancia: no sube el techo, pero evita corridas malas (de 9 a 13-15 req/s
   en el spike segun el momento).
 
-### 3. Volver a medir una cola mas larga, ahora que el tiempo util es exacto (1 hora)
+### 3. Volver a medir una cola mas larga, ahora que el tiempo util es exacto (1 hora) - HECHO
 
 Hasta la 1.3.0, una cola de 60 o 100 producia timeouts porque el chequeo no
 contaba la extraccion. La 1.3.1 lo corrige: una cola mas larga ya no deberia
 producir timeouts, y en Vegeta podria completar mas requests en la ventana de
 30 s.
 
-- Que hacer: `EXTRACT_MAX_PENDING` en 30, 45 y 60, intercalados, 3 rondas.
-- Ganancia esperada: unos puntos de exito en Vegeta (hipotesis, no medida).
-- Riesgo: mas memoria por replica (~15 MB por PDF grande en cola).
+- Resultado (informe, experimento 9): con 90 y 120 volvieron los timeouts,
+  porque el chequeo usaba el tiempo promedio. Con un margen de 4 desvios
+  (como el temporizador de TCP) la cola de 60 sube Vegeta de ~22 % a ~30 %
+  de exito sin timeouts. Adoptado en la 1.3.2.
 
-### 4. Proxy mas liviano: HAProxy o nginx en lugar de Traefik (medio dia)
+### 4. Proxy mas liviano: HAProxy o nginx en lugar de Traefik (medio dia) - PROBADO, NO SIRVE
 
 En Vegeta el proxy mueve ~167 MB/s de PDFs y compite por los mismos nucleos
 que las replicas. HAProxy y nginx estan escritos en C y gastan menos CPU por
@@ -80,6 +81,9 @@ byte que Traefik (Go).
 - Ganancia esperada: 5-15 % en la notebook (CPU que se le devuelve a las
   replicas). En una maquina con nucleos de sobra, casi nada.
 - Riesgo: bajo; hay que repetir la prueba de caos y el monitoreo.
+- Resultado (informe, experimento 11): Traefik usa solo ~20 % de un nucleo
+  en el spike, HAProxy casi lo mismo, y con HAProxy aparecieron timeouts en
+  Vegeta. Se mantiene Traefik.
 
 ### 5. Linux nativo en lugar de Docker Desktop (2-4 horas)
 
@@ -159,8 +163,8 @@ rapido.
 |---|---|---|---|
 | 1 | Medir en una PC con 8+ nucleos o con el generador en otra maquina | 1-2 h | de 9-15 a ~25-30 req/s |
 | 2 | Preparar la maquina y reportar la mediana de 3 corridas | 30 min | menos variacion |
-| 3 | Cola de 45-60 con el tiempo util exacto | 1 h | unos puntos en Vegeta |
-| 4 | HAProxy en lugar de Traefik | medio dia | 5-15 % en la notebook |
+| 3 | Cola de 60 con margen pesimista (hecho, 1.3.2) | 1 h | Vegeta de ~22 % a ~30 % |
+| 4 | HAProxy en lugar de Traefik (probado: no sirve) | - | - |
 | 5 | Linux nativo | 2-4 h | 5-15 % |
 | 6 | mypyc / Cython en el Markdown | 1-2 dias | 5-8 % |
 

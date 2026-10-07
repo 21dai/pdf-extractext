@@ -28,6 +28,8 @@ extraccion (pista 4). La extraccion es CPU pura y PDFium no es thread-safe.
 | Pool de procesos para extraer | no agrega CPU con 1 CPU de limite | complejidad sin ganancia |
 | `leasttime` | 1.172 rechazos en una corrida | manda mas trafico a la replica que responde rapido... con 503 |
 | `p2c` | igual a `wrr` dentro del ruido | sin ventaja |
+| HAProxy en lugar de Traefik | mismo CPU del proxy (~20 % de un nucleo), spike igual o peor y timeouts en Vegeta | sin ventaja |
+| 3 o 4 replicas en el spike | 12-13 req/s contra 14,3-14,5 con 5 | 5 sigue siendo lo mejor |
 | 1 a 5 replicas (escalado) | lineal hasta 2-3; despues el CPU por request sube de ~190 a 460 ms | la notebook tiene 4 nucleos para 5 replicas, Traefik y k6 |
 
 ## Consecuencias
