@@ -2,7 +2,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pymongo.database import Database
 from starlette.concurrency import run_in_threadpool
 
@@ -15,12 +15,7 @@ from app.api.uploads import (
     multipart_form,
 )
 from app.config import settings
-from app.core.exceptions import (
-    DocumentNotFoundError,
-    InvalidPdfError,
-    PdfTooLargeError,
-    PdfUnreadableError,
-)
+from app.core.exceptions import DocumentNotFoundError
 from app.core.validators import MAX_PAGINATION_LIMIT
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
@@ -84,9 +79,8 @@ async def create_document(
 
     El PDF se lee en memoria y con limite de tamano. Comparte la compuerta de
     admision con /extract: si la cola esta llena responde 503 con
-    Retry-After antes de leer el PDF. Los errores del PDF (400, 413, 422) los
-    traducen los handlers RFC 9457; el resto de las validaciones del service
-    responde 400.
+    Retry-After antes de leer el PDF. Los errores (400, 409, 413, 422, 503)
+    los traducen los handlers RFC 9457 de app/utils/problem_details.py.
     """
     if not is_multipart(request):
         raise missing_field("file")  # sin multipart no puede venir el archivo
@@ -101,14 +95,7 @@ async def create_document(
                 service.create_document, name, filename, content
             )
 
-        try:
-            return await ticket.run(work, request.is_disconnected, cost=len(content))
-        except InvalidPdfError, PdfTooLargeError, PdfUnreadableError:
-            raise
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-            )
+        return await ticket.run(work, request.is_disconnected, cost=len(content))
 
 
 @router.get(
@@ -151,13 +138,10 @@ def update_document(
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """Update a document."""
-    try:
-        document = service.update_document(document_id, document_data)
-        if not document:
-            raise DocumentNotFoundError(document_id)
-        return document
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    document = service.update_document(document_id, document_data)
+    if not document:
+        raise DocumentNotFoundError(document_id)
+    return document
 
 
 @router.delete(

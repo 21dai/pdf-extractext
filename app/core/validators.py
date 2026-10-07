@@ -1,13 +1,17 @@
 """Reusable pure validators for the document domain.
 
-All functions are stateless, raise ValueError with a clear message on failure,
+All functions are stateless, raise a domain error with a clear message on failure,
 and return a validated/transformed value on success.
 """
 
 import hashlib
 from pathlib import Path
 
-from app.core.exceptions import InvalidPdfError, PdfTooLargeError
+from app.core.exceptions import (
+    DocumentValidationError,
+    InvalidPdfError,
+    PdfTooLargeError,
+)
 
 MAX_DOCUMENT_NAME_LENGTH = 255
 MAX_ORIGINAL_FILENAME_LENGTH = 255
@@ -30,17 +34,19 @@ def validate_document_name(name: str | None) -> str:
         ValueError: When name is missing, blank, or exceeds length limits.
     """
     if name is None:
-        raise ValueError("El nombre del documento es obligatorio")
+        raise DocumentValidationError("El nombre del documento es obligatorio")
 
     if not isinstance(name, str):
-        raise ValueError("El nombre del documento debe ser una cadena de texto")
+        raise DocumentValidationError(
+            "El nombre del documento debe ser una cadena de texto"
+        )
 
     normalized = name.strip()
     if not normalized:
-        raise ValueError("El nombre del documento es obligatorio")
+        raise DocumentValidationError("El nombre del documento es obligatorio")
 
     if len(normalized) > MAX_DOCUMENT_NAME_LENGTH:
-        raise ValueError(
+        raise DocumentValidationError(
             "El nombre del documento no debe superar los "
             f"{MAX_DOCUMENT_NAME_LENGTH} caracteres"
         )
@@ -64,14 +70,14 @@ def validate_original_filename(original_filename: str | None) -> str:
         ValueError: When filename is missing or becomes empty after sanitisation.
     """
     if not original_filename:
-        raise ValueError("Se requiere un archivo PDF")
+        raise DocumentValidationError("Se requiere un archivo PDF")
 
     normalized = Path(original_filename).name.strip()
     if not normalized:
-        raise ValueError("Se requiere un archivo PDF")
+        raise DocumentValidationError("Se requiere un archivo PDF")
 
     if len(normalized) > MAX_ORIGINAL_FILENAME_LENGTH:
-        raise ValueError(
+        raise DocumentValidationError(
             "El nombre del archivo no debe superar los "
             f"{MAX_ORIGINAL_FILENAME_LENGTH} caracteres"
         )
@@ -93,7 +99,7 @@ def validate_pdf_extension(filename: str) -> None:
     """
     suffix = Path(filename).suffix.lower()
     if suffix != ".pdf":
-        raise ValueError("Solo se permiten archivos PDF")
+        raise DocumentValidationError("Solo se permiten archivos PDF")
 
 
 # ---------------------------------------------------------------------------
@@ -188,10 +194,10 @@ def validate_pagination(skip: int, limit: int) -> tuple[int, int]:
         ValueError: If skip or limit are negative, or limit exceeds the maximum.
     """
     if not isinstance(skip, int) or skip < 0:
-        raise ValueError("skip debe ser un entero no negativo")
+        raise DocumentValidationError("skip debe ser un entero no negativo")
 
     if not isinstance(limit, int) or limit < 1:
-        raise ValueError("limit debe ser un entero positivo")
+        raise DocumentValidationError("limit debe ser un entero positivo")
 
     if limit > MAX_PAGINATION_LIMIT:
         limit = MAX_PAGINATION_LIMIT

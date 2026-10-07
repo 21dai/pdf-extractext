@@ -34,6 +34,13 @@ class CannotReprocessError(ValueError):
         super().__init__(detail)
 
 
+class DocumentValidationError(ValueError):
+    """Invalid input for a document (name, filename, extension, pagination): 400.
+
+    Hereda de ValueError por compatibilidad con quien ya los atrapaba.
+    """
+
+
 class DuplicateDocumentError(Exception):
     """A document with the same content (checksum) already exists: 409."""
 
