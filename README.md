@@ -190,7 +190,7 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual es `1.3.3`. La `1.0.0` fue la primera release estable; la
+- La version actual es `1.3.4`. La `1.0.0` fue la primera release estable; la
   `1.0.1` sumo el hardening del contenedor (issue #18), sin cambios de comportamiento;
   la `1.1.0` cambia la extraccion a `pypdfium2` (unas 15 veces mas rapida) y agrega
   `WEB_CONCURRENCY` para correr varios procesos. Es MINOR porque mejora sin romper
@@ -210,6 +210,9 @@ image: pdf-extractext-api:${IMAGE_TAG:-latest}
   por replica: en Vegeta, de ~22 % a ~30 % de exito sin timeouts. PATCH.
 - La `1.3.3` baja el tiempo util a 25 s: mismo exito en Vegeta y ningun
   timeout en tres corridas (con 28 s quedaban algunos sueltos). PATCH.
+- La `1.3.4` corrige el alta de documentos (el PDF ya no pasa a disco, limite
+  de tamano sin leerlo entero, duplicados con `409`), CORS configurable y el
+  keep-alive de uvicorn mayor que el de Traefik (sin `502` sueltos). PATCH.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`. Cada release tiene ademas su tag de git (`v1.0.0` ... `v1.3.0`): `git checkout vX.Y.Z` reconstruye exactamente esa version.
 
@@ -237,8 +240,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.3.3
-IMAGE_TAG=1.3.3
+APP_VERSION=1.3.4
+IMAGE_TAG=1.3.4
 DEBUG=False
 # Nivel de los logs JSON en stdout: DEBUG, INFO, WARNING, ERROR.
 LOG_LEVEL=INFO
