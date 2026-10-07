@@ -289,3 +289,132 @@ class TestServiceTimeEstimate:
 
         run(scenario())
         assert gate.service_seconds == pytest.approx(0.3 + 0.05 * (3.0 - 0.3))
+
+
+class TestQueueOrder:
+    """Size order: the lightest waiting PDF runs first, unless one waited long.
+
+    En el spike el profesor tiene p50 1,88 s con un promedio de ~3,9 s
+    (100 VUs / 25,35 req/s): sus PDFs livianos salen rapido. Atendiendo por
+    orden de llegada, todos esperan lo mismo que los pesados.
+    """
+
+    def run_in_order(self, gate: AdmissionGate, costs, before_release=None):
+        """Occupy the turn, queue one request per cost and return the run order."""
+        order = []
+
+        async def scenario():
+            release_first = asyncio.Event()
+
+            async def first_work():
+                await release_first.wait()
+
+            async def one(cost):
+                async def work():
+                    order.append(cost)
+
+                with gate.admit() as ticket:
+                    await ticket.run(work, connected, cost=cost)
+
+            with gate.admit() as first:
+                running = asyncio.create_task(first.run(first_work, connected, cost=0))
+                await asyncio.sleep(0)  # el primero toma el turno
+                waiting = []
+                for cost in costs:
+                    waiting.append(asyncio.create_task(one(cost)))
+                    await asyncio.sleep(0)  # llegan en este orden
+                if before_release:
+                    before_release()
+                release_first.set()
+                await running
+                await asyncio.gather(*waiting)
+
+        run(scenario())
+        return order
+
+    def test_size_order_runs_the_lightest_waiting_request_first(self):
+        gate = make_gate(max_pending=10, queue_order="size")
+
+        assert self.run_in_order(gate, [300, 100, 200]) == [100, 200, 300]
+
+    def test_fifo_order_keeps_the_arrival_order(self):
+        gate = make_gate(max_pending=10, queue_order="fifo")
+
+        assert self.run_in_order(gate, [300, 100, 200]) == [300, 100, 200]
+
+    def test_a_request_that_waited_long_runs_before_lighter_ones(self):
+        """No starvation: past the age limit the oldest goes first."""
+        now = [0.0]
+        gate = make_gate(
+            max_wait_seconds=60.0,
+            max_pending=10,
+            queue_order="size",
+            priority_age_seconds=14.0,
+            clock=lambda: now[0],
+        )
+
+        def time_passes():
+            now[0] += 15.0  # todos esperaron mas que el limite de edad
+
+        order = self.run_in_order(gate, [300, 100, 200], before_release=time_passes)
+
+        assert order == [300, 100, 200]
+
+    def test_a_cancelled_waiter_does_not_block_the_queue(self):
+        gate = make_gate(max_pending=10, queue_order="size")
+        order = []
+
+        async def scenario():
+            release_first = asyncio.Event()
+
+            async def first_work():
+                await release_first.wait()
+
+            async def work():
+                order.append("segundo")
+
+            with gate.admit() as first:
+                running = asyncio.create_task(first.run(first_work, connected, cost=0))
+                await asyncio.sleep(0)
+                with gate.admit() as gone:
+                    abandoned = asyncio.create_task(gone.run(work, connected, cost=1))
+                    await asyncio.sleep(0)
+                    abandoned.cancel()  # el cliente se fue mientras esperaba
+                with gate.admit() as second:
+                    waiting = asyncio.create_task(second.run(work, connected, cost=5))
+                    await asyncio.sleep(0)
+                    release_first.set()
+                    await running
+                    await waiting
+
+        run(scenario())
+        assert order == ["segundo"]
+
+
+class TestQueueSettings:
+    """The order and the age limit come from the environment (12-Factor III)."""
+
+    def test_defaults_are_size_order_with_a_short_age_limit(self):
+        """7,5 s: lo que dio mejor resultado con un nucleo por replica.
+
+        Emulacion con 20 usuarios por replica: +13 % de throughput y p50 de
+        ~4 s a ~2,1 s (informe, experimento 14).
+        """
+        from app.config import Settings
+
+        defaults = Settings()
+
+        assert defaults.extract_queue_order == "size"
+        assert defaults.extract_priority_age_seconds == 7.5
+
+    def test_the_app_builds_its_gate_from_the_settings(self, db, monkeypatch):
+        from app.config import settings
+        from app.main import create_app
+
+        monkeypatch.setattr(settings, "extract_queue_order", "fifo")
+        monkeypatch.setattr(settings, "extract_priority_age_seconds", 5.0)
+
+        gate = create_app().state.admission_gate
+
+        assert gate.queue_order == "fifo"
+        assert gate.priority_age_seconds == 5.0
