@@ -3,7 +3,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: pdf-extractext-api:${IMAGE_TAG:-latest}
+    # Mismo nombre de imagen que el stack del TP y el repo infrastructure.
+    image: pdf-extractext:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - ../.env

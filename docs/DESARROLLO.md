@@ -54,7 +54,7 @@ Cambiar de entorno es solo editar `.env`, sin tocar ningun archivo versionado.
 La imagen de la API se taguea con `IMAGE_TAG` (variable definida en `.env`), nunca con `latest` como release real:
 
 ```yaml
-image: pdf-extractext-api:${IMAGE_TAG:-latest}
+image: pdf-extractext:${IMAGE_TAG:-latest}
 ```
 
 `latest` queda solo como valor por defecto de conveniencia si no se define `IMAGE_TAG` (por ejemplo, en una build local rapida). Para una release real:

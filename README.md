@@ -153,6 +153,16 @@ ROOT_PASSWORD=9009
 
 ## Ejecucion con Docker
 
+Hay tres formas de levantarlo, segun para que:
+
+| Para que | Compose | Comando |
+|---|---|---|
+| Desarrollar la API completa (CRUD + MongoDB) | `docker/docker-compose.yml` y `docker/docker-compose.db.yml` | `make up` o los comandos de abajo |
+| El TP: Traefik + 5 replicas de `/extract`, sin MongoDB | `docker-compose.yml` de la raiz | `docker compose up --build` o `make tp-up` |
+| Todo el sistema (orquestador + este servicio + MongoDB) | repo `infrastructure` | ver su README |
+
+Los tres usan los mismos puertos: no levantar dos a la vez.
+
 ### Atajo con `make` (opcional)
 
 Si tenes `make` instalado, desde la raiz del proyecto:
