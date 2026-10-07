@@ -1,6 +1,6 @@
 # Que mas se puede hacer para superar al profesor
 
-Hoja de ruta despues de la version 1.3.1. Cada propuesta sale de una medicion
+Hoja de ruta despues de la version 1.3.3. Cada propuesta sale de una medicion
 del [informe](INFORME-TP.md); los tiempos son estimaciones para una persona
 del grupo que ya conoce el proyecto.
 
@@ -8,10 +8,10 @@ del grupo que ya conoce el proyecto.
 
 | Metrica | Nosotros (notebook) | Profesor | Que la mueve |
 |---|---|---|---|
-| Spike: throughput | 9-15 req/s | 25,35 req/s | CPU disponible y CPU por request |
-| Spike: p50 / p95 | ~7-9 s / ~10-12 s | 1,88 s / 8,80 s | el throughput (ley de Little) |
-| Vegeta: exito | ~20-23 % | 66,53 % | el throughput |
-| Vegeta: timeouts / p50 | **0 / 0,1-0,8 s** | 501 / 14,89 s | ya ganamos |
+| Spike: throughput | 11-14,5 req/s | 25,35 req/s | CPU disponible y CPU por request |
+| Spike: p50 / p95 | ~6-7 s / ~7,8-11,3 s | 1,88 s / 8,80 s | el throughput (ley de Little) |
+| Vegeta: exito | ~25-30 % (1.3.3) | 66,53 % | el throughput |
+| Vegeta: timeouts / p50 | **0-1 / 0,1-2,5 s** | 501 / 14,89 s | ya ganamos |
 
 Dos numeros explican casi todo:
 

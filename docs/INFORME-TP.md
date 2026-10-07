@@ -1,6 +1,6 @@
 # Informe del TP: Test de Carga, Estres y Optimizacion de Microservicio
 
-Microservicio `pdf-extractext`, version 1.3.1 (2026-10-06). Las secciones 1 a
+Microservicio `pdf-extractext`, version 1.3.3 (2026-10-07). Las secciones 1 a
 7 son el informe; el anexo es la bitacora con cada medicion en el orden en que
 se hizo. Las decisiones estan en [decisions/](decisions/README.md), el plan de
 trabajo en [PLAN-TP.md](PLAN-TP.md) y los scripts en
@@ -24,8 +24,22 @@ Medicion final en la misma notebook, intercalando la primera version con
 | Vegeta: timeouts | 1.315 / 1.302 | **0 / 0** | 501 |
 | Vegeta: p50 | 30,00 s | **0,81 / 0,11 s** | 14,89 s |
 
+Despues de esa medicion, la 1.3.2 y la 1.3.3 subieron la cola a 60 por
+replica con un tiempo util de 25 s y un margen pesimista (experimentos 9 y
+13). Verificacion con `benchmark.ps1`, tres corridas seguidas de la 1.3.3:
+
+| Prueba | Corridas | Profesor |
+|---|---|---|
+| Spike: throughput | 11,63 / 10,97 / 11,47 req/s (mejor del dia: 14,49) | 25,35 req/s |
+| Spike: p95 | 10,43 / 11,02 / 11,29 s (mejor del dia: 7,81 s) | 8,80 s |
+| Spike: errores | 0 / 0 / 0 % | 0 % |
+| Vegeta: exito | 25,3 / 25,5 / 27,8 % | 66,53 % |
+| Vegeta: timeouts | **0 / 1 / 0** | 501 |
+| Vegeta: p50 | **2,53 / 1,85 / 1,47 s** | 14,89 s |
+
 - **Bajo sobrecarga le ganamos al profesor**: ningun request vence por
-  timeout (el tiene 501) y la mediana de Vegeta es de 0,1-0,8 s contra 14,89 s.
+  timeout, salvo uno suelto en una de seis corridas (el tiene 501), y la
+  mediana de Vegeta es de 0,1-2,5 s contra 14,89 s.
   Lo que no se puede atender a tiempo se rechaza al instante con `503` y
   `Retry-After`.
 - **En throughput no le ganamos en esta maquina**, y no se puede saber si le
@@ -202,12 +216,13 @@ pero seria aprovechar el benchmark y no mejorar el servicio.
 
 | Prueba | Nosotros (mediana final) | Profesor | |
 |---|---|---|---|
-| Spike: throughput | 10,5 req/s (mejor corrida: 15,34) | 25,35 req/s | peor |
+| Spike: throughput | 11-14,5 req/s segun el momento (mejor corrida: 15,34) | 25,35 req/s | peor |
 | Spike: errores | 0 % | 0 % | igual |
-| Spike: p95 | 11,1 s (mejor corrida: 7,53 s) | 8,80 s | peor en la mediana |
-| Vegeta: exito | 20,8-22,9 % | 66,53 % | peor |
-| Vegeta: timeouts | 0 | 501 | **mejor** |
-| Vegeta: p50 | 0,11-0,81 s | 14,89 s | **mejor** |
+| Spike: p95 | 7,8-11,3 s (mejor corrida: 7,53 s) | 8,80 s | mejor en las corridas buenas |
+| Spike: latencia maxima | 8,7-12,8 s | 13,94 s | **mejor** |
+| Vegeta: exito | 25-30 % (1.3.3) | 66,53 % | peor |
+| Vegeta: timeouts | 0 (1 suelto en 6 corridas) | 501 | **mejor** |
+| Vegeta: p50 | 0,1-2,5 s | 14,89 s | **mejor** |
 | Por replica, con nucleo propio | 5,5-6,4 req/s | 5,07 req/s | **mejor** |
 
 La consigna pide superarlo "bajo las mismas restricciones de hardware", y esa
@@ -216,7 +231,7 @@ el profesor ni esta disponible su microservicio para correrlo en esta
 notebook. Lo que si se puede afirmar con mediciones:
 
 - El servicio maneja la congestion como pide la nota tecnica de la consigna:
-  ningun tiempo de respuesta supera el timeout.
+  practicamente ningun tiempo de respuesta supera el timeout.
 - Cada replica, cuando tiene su nucleo, rinde mas que el promedio por replica
   del profesor. Si en su maquina cada replica tiene un nucleo libre, la
   proyeccion es ~28-32 req/s en el spike; es una proyeccion, no una medicion.

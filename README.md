@@ -45,10 +45,12 @@ Cada script imprime la comparacion con el benchmark del profesor y si se
 cumplio el SLO. Los generadores de carga corren dentro de la red de Docker: en
 Windows, el reenvio de puertos de Docker Desktop distorsiona los resultados.
 
-| Prueba | Nosotros (v1.3.0) | Profesor |
+| Prueba | Nosotros (v1.3.3) | Profesor |
 |---|---|---|
-| Spike: throughput / errores | 10,5 req/s / 0 % | 25,35 req/s / 0 % |
-| Vegeta: timeouts / p50 | **0 / 0,1-0,8 s** | 501 / 14,89 s |
+| Spike: throughput / errores | 11-14,5 req/s / 0 % | 25,35 req/s / 0 % |
+| Spike: p95 / maximo | 7,8-11,3 s / 8,7-12,8 s | 8,80 s / 13,94 s |
+| Vegeta: exito | 25-30 % | 66,53 % |
+| Vegeta: timeouts / p50 | **0-1 / 0,1-2,5 s** | 501 / 14,89 s |
 
 Medido en una notebook con 4 nucleos fisicos para 5 replicas, Traefik y el
 generador de carga. El analisis completo (arquitectura, cuello de botella,
