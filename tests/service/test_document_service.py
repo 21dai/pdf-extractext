@@ -253,3 +253,32 @@ def test_delete_document_removes_it_from_subsequent_reads(service: DocumentServi
 def test_delete_document_returns_false_for_unknown_id(service: DocumentService):
     """Test deleting an unknown document reports that nothing was deleted."""
     assert service.delete_document(999) is False
+
+
+# motor de extraccion inyectable
+
+
+def test_create_document_uses_the_text_engine_it_receives(
+    repository: DocumentRepository,
+):
+    """El motor llega por constructor, como en ExtractionService (DIP)."""
+    received = []
+
+    def fake_engine(content: bytes) -> str:
+        received.append(content)
+        return "texto del motor falso"
+
+    service = DocumentService(
+        repository, max_pdf_size_bytes=1024, text_extractor=fake_engine
+    )
+
+    created = service.create_document("Falso", "falso.pdf", MINIMAL_PDF_BYTES)
+
+    assert created.extracted_text == "texto del motor falso"
+    assert received == [MINIMAL_PDF_BYTES]
+
+
+def test_create_document_uses_pdfium_by_default(service: DocumentService):
+    created = service.create_document("Real", "real.pdf", MINIMAL_PDF_BYTES)
+
+    assert DEFAULT_PDF_TEXT in created.extracted_text
