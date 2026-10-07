@@ -76,6 +76,7 @@ async def extract(
                 content, _ = await form_file(form, "file")
         else:
             content = await read_raw_body(request, service.max_pdf_size_bytes)
+        ticket.body_received()
 
         async def work() -> PdfExtraction:
             return await run_in_threadpool(service.extract, content)

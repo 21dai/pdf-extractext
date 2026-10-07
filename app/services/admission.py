@@ -181,6 +181,7 @@ class Ticket:
     def __init__(self, gate: AdmissionGate, admitted_at: float):
         self._gate = gate
         self._admitted_at = admitted_at
+        self._upload_seconds = 0.0
         self._released = False
 
     def __enter__(self) -> "Ticket":
@@ -188,6 +189,10 @@ class Ticket:
 
     def __exit__(self, *exc_info: object) -> None:
         self.release()
+
+    def body_received(self) -> None:
+        """Note that the whole PDF arrived, to know how long the upload took."""
+        self._upload_seconds = self._gate._clock() - self._admitted_at
 
     def release(self) -> None:
         if not self._released:
@@ -218,9 +223,13 @@ class Ticket:
                 raise ClientDisconnectedError()
             started = gate._clock()
             # El tiempo util cubre la respuesta, no solo la espera: si lo que
-            # espero mas lo que puede tardar la extraccion se pasa, no llega.
+            # espero, mas lo que puede tardar la extraccion, mas la vuelta de
+            # la respuesta (que cuesta como lo que tardo en llegar el PDF) se
+            # pasa, no llega.
             waited = started - self._admitted_at
-            finish_estimate = waited + gate._pessimistic_service_seconds()
+            finish_estimate = (
+                waited + gate._pessimistic_service_seconds() + self._upload_seconds
+            )
             if finish_estimate > gate.max_wait_seconds:
                 raise gate._overloaded(gate.pending * gate.service_seconds)
             try:
