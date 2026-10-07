@@ -7,11 +7,15 @@
 #   .\tests\stress\benchmark.ps1           # deja el stack levantado al final
 #   .\tests\stress\benchmark.ps1 -Apagar   # lo apaga al terminar
 #   .\tests\stress\benchmark.ps1 -SinBuild # no reconstruye la imagen
+#   .\tests\stress\benchmark.ps1 -Navegador # ademas, graficos en el navegador:
+#        dashboard de k6 en vivo (http://localhost:5665), reporte HTML del spike
+#        y Grafana con las metricas de Traefik (http://localhost:3000)
 #
 # Solo necesita Docker Desktop abierto.
 param(
     [switch]$Apagar,
-    [switch]$SinBuild
+    [switch]$SinBuild,
+    [switch]$Navegador
 )
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -31,6 +35,7 @@ docker compose --profile monitoreo down --remove-orphans
 
 Paso "2/4  Levantando Traefik + 5 replicas"
 if ($SinBuild) { docker compose up -d } else { docker compose up --build -d }
+if ($Navegador) { docker compose --profile monitoreo up -d prometheus grafana }
 if ($LASTEXITCODE -ne 0) { Write-Host "No se pudo levantar el stack. Esta abierto Docker Desktop?" -ForegroundColor Red; exit 1 }
 
 $limite = (Get-Date).AddSeconds(180)
@@ -45,7 +50,15 @@ $limite = (Get-Date).AddSeconds(60)
 do { Start-Sleep -Seconds 1; $estado = curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1/health } while ($estado -ne "200" -and (Get-Date) -lt $limite)
 
 Paso "3/4  Spike con k6 (100 VUs, 10s / 20s / 10s)"
-docker run --rm --network $red -v "${stress}:/scripts:ro" grafana/k6 run --quiet -e BASE_URL=http://traefik /scripts/spike.js | Tee-Object -Variable spike
+if ($Navegador) {
+    Write-Host "  Dashboard de k6 en vivo: http://localhost:5665 (abrilo ahora)" -ForegroundColor Green
+    Start-Process "http://localhost:3000/d/tp-extract"
+    docker run --rm --network $red -p 5665:5665 -e K6_WEB_DASHBOARD=true -e K6_WEB_DASHBOARD_HOST=0.0.0.0 `
+        -e K6_WEB_DASHBOARD_EXPORT=/resultados/spike.html -v "${stress}:/scripts:ro" -v "${stress}\results:/resultados" `
+        grafana/k6 run --quiet -e BASE_URL=http://traefik /scripts/spike.js | Tee-Object -Variable spike
+} else {
+    docker run --rm --network $red -v "${stress}:/scripts:ro" grafana/k6 run --quiet -e BASE_URL=http://traefik /scripts/spike.js | Tee-Object -Variable spike
+}
 $spikeOk = ($LASTEXITCODE -eq 0)
 
 Paso "4/4  Carga fija con Vegeta (50 req/s durante 30 s, timeout 30 s)"
@@ -104,11 +117,18 @@ Write-Host ("  SLO del spike:  " + $(if ($spikeOk) { "cumplido" } else { "NO cum
 Write-Host ("  SLO de Vegeta:  " + $(if ($vegetaOk) { "cumplido (ningun timeout)" } else { "NO cumplido" })) -ForegroundColor $(if ($vegetaOk) { "Green" } else { "Red" })
 Write-Host ""
 Write-Host "  Grafico de Vegeta:   tests\stress\results\vegeta_50rps.html"
+if ($Navegador) {
+    Write-Host "  Reporte del spike:   tests\stress\results\spike.html"
+    Write-Host "  Grafana:             http://localhost:3000/d/tp-extract"
+    Invoke-Item (Join-Path $stress "results\vegeta_50rps.html")
+    $reporte = Join-Path $stress "results\spike.html"
+    if (Test-Path $reporte) { Invoke-Item $reporte }
+}
 Write-Host "  Dashboard Traefik:   http://localhost:8080/dashboard/"
 
 if ($Apagar) {
     Paso "Apagando el stack"
-    docker compose down
+    docker compose --profile monitoreo down
 } else {
     Write-Host "  El stack sigue levantado. Para apagarlo: docker compose down"
 }
