@@ -202,3 +202,20 @@ def test_duplicate_detected_by_the_unique_index_returns_409(
     assert second_response.json()["detail"] == (
         "Ya existe un documento con el mismo checksum"
     )
+
+
+def test_create_document_shares_the_admission_gate_with_extract(client: TestClient):
+    """El alta tambien usa PDFium: comparte la cola y la contrapresion de /extract.
+
+    Con la cola llena responde 503 con Retry-After, sin leer el PDF ni guardar
+    nada, en vez de bloquear un hilo mas contra el lock de PDFium.
+    """
+    gate = client.app.state.admission_gate
+    gate.max_pending = 1
+    with gate.admit():  # la cola queda llena
+        response = create_document_response(client, name="Saturado")
+
+    assert response.status_code == 503
+    assert int(response.headers["retry-after"]) >= 1
+    assert client.get("/api/v1/documents").json() == []
+    assert gate.pending == 0
