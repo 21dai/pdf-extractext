@@ -233,6 +233,40 @@ class TestUsefulLife:
             run(scenario())
         assert calls == 0
 
+    def test_the_margin_grows_when_extraction_times_vary(self):
+        """Average plus 4 deviations, like the TCP retransmission timer.
+
+        Con el promedio solo, la cola de 30 tuvo 4 timeouts: con la maquina
+        saturada un PDF grande tarda varias veces el promedio.
+        """
+        now = [0.0]
+        gate = make_gate(
+            max_wait_seconds=10.0,
+            initial_service_seconds=1.0,
+            smoothing=0.5,
+            clock=lambda: now[0],
+        )
+        calls = 0
+
+        async def slow_work():
+            now[0] += 3.0  # promedio 2 s, desvio 1 s
+
+        async def work():
+            nonlocal calls
+            calls += 1
+
+        async def scenario():
+            with gate.admit() as ticket:
+                await ticket.run(slow_work, connected)
+            with gate.admit() as ticket:
+                now[0] += 7.0  # 7 + 2 <= 10, pero 7 + 2 + 4 x 1 > 10
+                await ticket.run(work, connected)
+
+        with pytest.raises(ServiceOverloadedError):
+            run(scenario())
+        assert gate.service_deviation_seconds == pytest.approx(1.0)
+        assert calls == 0
+
 
 class TestServiceTimeEstimate:
     def test_a_single_slow_extraction_barely_moves_the_estimate(self):
