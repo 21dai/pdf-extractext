@@ -126,6 +126,8 @@ Efecto de cada cambio, medido por separado (detalle en el anexo):
 | `inFlightReq` de Traefik | empate con el limite de la app | no |
 | Reintentos de Traefik | 502 por caida de ~29 a ~18 | si |
 | Apagado ordenado con 35 s de gracia | 0 requests perdidos al apagar una replica | si |
+| Tiempo util que cuenta la extraccion (1.3.1) | Vegeta: de 19 timeouts a 0 con la maquina lenta | si |
+| Cola por tamano (el PDF mas liviano primero) | spike -12 % de throughput y p95 de 12 a 17 s | no |
 
 ## 5. Proceso de investigacion
 
@@ -173,10 +175,16 @@ una decision. Los errores propios tambien estan, porque cambiaron el camino.
 9. **¿Se puede bajar el CPU por request?** Otros motores (PyMuPDF, pdf_oxide),
    otros allocators y quitar mas envoltorios: nada gana por fuera del ruido.
    Lo que no mejora no se commitea.
-10. **Limite en la app o en el proxy**: `inFlightReq` de Traefik empata en
+10. **Atender primero los PDFs livianos.** El p50 del profesor (1,88 s) es
+    mucho menor que su promedio (100 VUs / 25,35 req/s = 3,9 s): parecia que
+    sus PDFs chicos salian primero. Se probo ordenar la cola por tamano, con
+    un limite de edad para que los grandes no esperen para siempre. Empeoro
+    el throughput y el p95 del spike y no mejoro Vegeta: se revirtio
+    (experimento 8).
+11. **Limite en la app o en el proxy**: `inFlightReq` de Traefik empata en
     exito, pero es un numero fijo sin tiempo util y responde 429 sin
     `Retry-After`. Se quedo el de la app.
-11. **Resiliencia** (Fase 3): la prueba de caos mostro ~29 errores por caida;
+12. **Resiliencia** (Fase 3): la prueba de caos mostro ~29 errores por caida;
     los reintentos de Traefik los bajan a ~18 y el apagado ordenado no pierde
     ninguno. El SLO quedo cargado en los scripts para que cada corrida diga
     sola si se cumple.
@@ -764,3 +772,28 @@ Vegeta, dos rondas intercaladas:
 
 El spike con la 1.3.1 sigue sin errores (11,42 req/s, p95 9,67 s, SLO
 cumplido): con esperas de ~10 s el chequeo nunca rechaza.
+
+### Experimento 8: cola por tamano (2026-10-07, descartado)
+
+Hipotesis: con 100 VUs la latencia promedio es 100 / throughput (ley de
+Little), pero la mediana depende del orden de la cola. El profesor tiene p50
+1,88 s con un promedio de ~3,9 s, asi que sus PDFs livianos parecen salir
+primero; la nuestra atiende por orden de llegada y todos tardan parecido.
+
+Se implemento con TDD (`7a520ac` en rojo, `a12fc73` en verde): el turno es del
+PDF de menos bytes que espera (con los 4 PDFs oficiales el orden por tamano
+coincide con el de costo en PDFium), y el que ya espero 14 s pasa primero para
+que los grandes no se queden sin turno. Misma imagen, cambiando solo
+`EXTRACT_QUEUE_ORDER`, dos rondas intercaladas:
+
+| Orden | Spike req/s | Spike p50 | Spike p95 | Vegeta exito |
+|---|---|---|---|---|
+| Por llegada | 10,37 / 10,64 | 8,31 / 7,27 s | 11,77 / 12,10 s | 21,4 % |
+| Por tamano | 9,43 / 8,58 | 6,58 / 9,66 s | **16,40 / 17,55 s** | 22,5 % |
+
+Empeoro el throughput y el p95 en las dos rondas, y la mediana bajo solo en
+una. Con 100 usuarios en un modelo cerrado, los que tienen PDFs grandes se
+acumulan detras de los chicos hasta que el limite de edad los hace pasar: la
+cola termina funcionando como por llegada pero con los grandes mas
+atrasados. Se revirtio (`083fdbb`, `4a89033`); el codigo vuelve a ser el de
+la 1.3.1.

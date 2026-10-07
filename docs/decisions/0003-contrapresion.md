@@ -37,6 +37,7 @@ excede el tiempo util de vida.
 | Estimar la espera al llegar (EWMA) | 57-141 timeouts | estima mal durante el ataque; llego a rechazar 1 request en el spike |
 | Cola de 100 | 7,7 % de exito en una corrida, 985 timeouts | guarda mas trabajo del que entra en el tiempo util |
 | Cola de 30 | 0 timeouts, p50 ~0,1 s, ~390 MiB | elegida |
+| Cola por tamano (el PDF mas liviano primero) | spike: throughput -12 %, p95 de 12 a 17 s; Vegeta igual | los grandes se acumulan; revertida |
 | `inFlightReq` de Traefik (150, responde 429) | empate en exito, 0 timeouts | numero fijo sin tiempo util, 429 sin `Retry-After`, limite global y no por replica |
 
 ## Consecuencias
