@@ -247,6 +247,8 @@ PORT=8000
 # Procesos de uvicorn: PDFs que se extraen en paralelo. 1 en desarrollo;
 # en Docker, tantos como nucleos quieras dedicar (la extraccion es CPU).
 WEB_CONCURRENCY=1
+# Segundos que uvicorn mantiene una conexion inactiva: mas que Traefik (90 s).
+HTTP_KEEP_ALIVE_SECONDS=120
 
 DATABASE_URL=mongodb://admin:9009@mongo:27017/?authSource=admin
 DATABASE_NAME=pdf_extract

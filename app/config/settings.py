@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # de PDF es CPU y el GIL limita a un nucleo por proceso: con N workers se
     # procesan N PDFs a la vez. uvicorn lee WEB_CONCURRENCY por convencion.
     web_concurrency: int = 1
+    # Segundos que uvicorn mantiene abierta una conexion inactiva. Tiene que ser
+    # mayor que el de Traefik (90 s) para que no reuse una que se esta cerrando.
+    http_keep_alive_seconds: int = 120
 
     # Database
     database_url: str = "mongodb://localhost:27017"
