@@ -1,9 +1,9 @@
 """Application settings and configuration."""
 
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -57,6 +57,19 @@ class Settings(BaseSettings):
     api_docs_url: Optional[str] = "/docs"
     api_redoc_url: Optional[str] = "/redoc"
     api_openapi_url: Optional[str] = "/openapi.json"
+
+    # Origenes permitidos por CORS. "*" (cualquiera) no manda credenciales;
+    # con una lista explicita si (ver create_app). En el .env, separados por
+    # coma: CORS_ALLOW_ORIGINS=http://localhost:3000,http://localhost:5173
+    cors_allow_origins: Annotated[list[str], NoDecode] = ["*"]
+
+    @field_validator("cors_allow_origins", mode="before")
+    @classmethod
+    def parse_cors_allow_origins(cls, value: Any) -> Any:
+        """Accept a comma separated list, as it comes from the environment."""
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
     @field_validator("debug", mode="before")
     @classmethod

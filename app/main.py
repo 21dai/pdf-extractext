@@ -62,10 +62,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Con "*" no se permiten credenciales: Starlette responderia con el origen
+    # de cualquier sitio y le dejaria mandar cookies. Solo con origenes
+    # explicitos (CORS_ALLOW_ORIGINS) tiene sentido permitirlas.
+    any_origin = "*" in settings.cors_allow_origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=not any_origin,
         allow_methods=["*"],
         allow_headers=["*"],
     )

@@ -259,6 +259,8 @@ DOCUMENTS_API_ENABLED=true
 EXTRACT_MAX_WAIT_SECONDS=25
 # Requests de /extract admitidos a la vez por proceso (la cola); llena, 503.
 EXTRACT_MAX_PENDING=60
+# Origenes permitidos por CORS, separados por coma. "*" = cualquiera, sin credenciales.
+CORS_ALLOW_ORIGINS=*
 
 API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
