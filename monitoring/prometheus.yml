@@ -8,3 +8,12 @@ scrape_configs:
   - job_name: traefik
     static_configs:
       - targets: ["traefik:8080"]
+
+  # Metricas propias de cada replica (GET /metrics): cola, rechazos por motivo
+  # y tiempo de extraccion. El DNS de Docker devuelve una IP por replica.
+  - job_name: extract
+    dns_sd_configs:
+      - names: ["extract"]
+        type: A
+        port: 8000
+        refresh_interval: 5s
