@@ -40,9 +40,9 @@ una falla: el servicio rechaza al instante lo que no puede terminar a tiempo.
 
 - Si la carga es la esperada, falta capacidad: ver el plan de capacidad en
   `docs/INFORME-TP.md` (cada replica rinde ~5-6 req/s con un nucleo propio).
-- No subir la cola por encima de ~30: con 100 la cola guarda mas trabajo del
-  que entra en el tiempo util y los requests vencen esperando (Fase 2,
-  experimento 2).
+- No subir la cola por encima de 60: con 90 o mas aparecen timeouts, porque
+  la cola guarda mas trabajo del que entra en el tiempo util (informe,
+  experimento 9).
 
 ### Una replica se cae
 

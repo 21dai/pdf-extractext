@@ -251,7 +251,7 @@ DOCUMENTS_API_ENABLED=true
 # si no llega a terminar a tiempo, 503 sin procesarlo. Menor que el timeout de los clientes.
 EXTRACT_MAX_WAIT_SECONDS=28
 # Requests de /extract admitidos a la vez por proceso (la cola); llena, 503.
-EXTRACT_MAX_PENDING=30
+EXTRACT_MAX_PENDING=60
 
 API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
@@ -399,7 +399,7 @@ responde `200`:
   (`app/core/markdown.py`) y las vinetas como items de lista.
 - Errores en formato RFC 9457: `400` si no es un PDF o esta vacio, `413` si
   supera `MAX_PDF_SIZE_BYTES`, `422` si PDFium no puede leerlo.
-- Backpressure: cada proceso admite hasta `EXTRACT_MAX_PENDING` (30) requests a
+- Backpressure: cada proceso admite hasta `EXTRACT_MAX_PENDING` (60) requests a
   la vez; con la cola llena responde `503` con `Retry-After` al instante, sin leer
   el PDF. Un request que no llegaria a terminar dentro de `EXTRACT_MAX_WAIT_SECONDS`
   (28 s, contando lo que espero mas una extraccion promedio) tambien recibe `503`

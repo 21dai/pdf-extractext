@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     extract_max_wait_seconds: float = 28.0
     # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
     # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.
-    extract_max_pending: int = 30
+    extract_max_pending: int = 60
 
     # MongoDB Auth
     root_username: str = ""
