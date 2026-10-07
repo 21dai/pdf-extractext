@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "API de Extraccion de PDF"
-    app_version: str = "1.3.4"
+    app_version: str = "1.4.0"
     debug: bool = False
     # Nivel de los logs JSON que se escriben en stdout (12-Factor XI).
     log_level: str = "INFO"

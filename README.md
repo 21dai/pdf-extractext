@@ -114,8 +114,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.3.4
-IMAGE_TAG=1.3.4
+APP_VERSION=1.4.0
+IMAGE_TAG=1.4.0
 DEBUG=False
 # Nivel de los logs JSON en stdout: DEBUG, INFO, WARNING, ERROR.
 LOG_LEVEL=INFO

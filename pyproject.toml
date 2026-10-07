@@ -1,6 +1,6 @@
 [project]
 name = "pdf-extractext"
-version = "1.3.4"
+version = "1.4.0"
 description = "PDF extraction API with 3-layer architecture"
 readme = "README.md"
 # Misma version de Python que el orquestador, en local y en la imagen
