@@ -1,6 +1,6 @@
 """Application settings and configuration."""
 
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
     # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.
     extract_max_pending: int = 60
+    # Orden de la cola de /extract: "size" atiende primero el PDF mas liviano
+    # (menos bytes); "fifo", por orden de llegada. Con "size", el que ya espero
+    # EXTRACT_PRIORITY_AGE_SECONDS pasa primero para que los grandes no se
+    # queden sin turno. 7,5 s es lo que mejor dio con un nucleo por replica
+    # (informe, experimento 14); en una maquina con menos nucleos que replicas
+    # conviene "fifo".
+    extract_queue_order: Literal["fifo", "size"] = "size"
+    extract_priority_age_seconds: float = 7.5
 
     # MongoDB Auth
     root_username: str = ""
