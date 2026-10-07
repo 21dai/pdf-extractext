@@ -19,7 +19,8 @@ La compuerta:
    PDFium. El event loop sigue atendiendo HTTP mientras se extrae.
 3. Cuando le toca el turno, si el cliente ya se fue o si el request no
    llegaria a terminar dentro de `max_wait_seconds` (su tiempo util: lo que
-   ya espero mas el tiempo promedio de una extraccion), no hace el trabajo:
+   ya espero mas una extraccion pesimista, el promedio mas 4 desvios, como el
+   temporizador de retransmision de TCP en la RFC 6298), no hace el trabajo:
    el primero no tiene a quien responderle y el segundo recibe 503 al
    instante. Asi nunca se gasta CPU en algo que va a vencer.
 """
@@ -33,6 +34,10 @@ from typing import TypeVar
 from app.core.exceptions import ClientDisconnectedError, ServiceOverloadedError
 
 Result = TypeVar("Result")
+
+# Margen del chequeo del tiempo util: promedio + 4 desvios, como el RTO de TCP.
+# Con la maquina saturada un PDF grande tarda varias veces el promedio.
+DEVIATION_MARGIN = 4
 
 
 class AdmissionGate:
@@ -49,8 +54,9 @@ class AdmissionGate:
         """Initialize the gate.
 
         Args:
-            max_wait_seconds: Useful life of a request: if its wait plus an
-                average extraction exceeds it, it is rejected without processing
+            max_wait_seconds: Useful life of a request: if its wait plus a
+                pessimistic extraction (average + 4 deviations) exceeds it, it
+                is rejected without processing
             max_pending: Requests admitted at the same time (queue size)
             initial_service_seconds: Service time assumed until there are
                 measurements; the average feeds the useful-life check and the
@@ -62,6 +68,7 @@ class AdmissionGate:
         self.max_wait_seconds = max_wait_seconds
         self.max_pending = max_pending
         self.service_seconds = initial_service_seconds
+        self.service_deviation_seconds = 0.0
         self.smoothing = smoothing
         self.pending = 0
         self._clock = clock
@@ -82,7 +89,15 @@ class AdmissionGate:
         return ServiceOverloadedError(max(1, math.ceil(estimated_wait)))
 
     def _observe(self, seconds: float) -> None:
+        # El desvio se actualiza con el promedio anterior (RFC 6298).
+        error = abs(seconds - self.service_seconds)
+        self.service_deviation_seconds += self.smoothing * (
+            error - self.service_deviation_seconds
+        )
         self.service_seconds += self.smoothing * (seconds - self.service_seconds)
+
+    def _pessimistic_service_seconds(self) -> float:
+        return self.service_seconds + DEVIATION_MARGIN * self.service_deviation_seconds
 
 
 class Ticket:
@@ -121,8 +136,9 @@ class Ticket:
                 raise ClientDisconnectedError()
             started = gate._clock()
             # El tiempo util cubre la respuesta, no solo la espera: si lo que
-            # espero mas lo que tarda una extraccion se pasa, ya no llega.
-            finish_estimate = started - self._admitted_at + gate.service_seconds
+            # espero mas lo que puede tardar la extraccion se pasa, no llega.
+            waited = started - self._admitted_at
+            finish_estimate = waited + gate._pessimistic_service_seconds()
             if finish_estimate > gate.max_wait_seconds:
                 raise gate._overloaded(gate.pending * gate.service_seconds)
             try:
