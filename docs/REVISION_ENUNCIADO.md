@@ -94,9 +94,15 @@ Como se resuelve:
 - el checksum
 - y la extraccion
 
-se realizan en memoria a partir de los bytes del upload. En `POST /extract`
-tambien el multipart queda en memoria (Starlette guarda en disco las partes de
-mas de 1 MB, y eso se desactivo), y un test falla si un upload pasa a disco.
+se realizan en memoria a partir de los bytes del upload. Los dos endpoints que
+reciben PDFs (`POST /api/v1/documents` y `POST /extract`) leen el multipart con
+`app/api/uploads.py`: Starlette guarda en disco las partes de mas de 1 MB, y
+ahi el umbral es el tamano maximo aceptado, asi que todo PDF aceptado queda en
+memoria. Un test por endpoint falla si un upload pasa a disco.
+
+Hasta la version 1.3.3 esto solo estaba resuelto en `/extract`: un PDF de mas de
+1 MB subido al CRUD se escribia en un archivo temporal. Se detecto con un test
+y se corrigio en la 1.3.4.
 
 ## 9. Python como lenguaje
 

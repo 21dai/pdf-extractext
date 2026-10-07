@@ -66,7 +66,8 @@ antes y despues, proceso de investigacion) esta en
 - Validacion de nombre, extension `.pdf`, firma `%PDF-` y tamanio maximo.
 - Extraccion de texto con `pypdfium2` (PDFium, el motor de PDF de Chrome) en memoria, sin guardar temporalmente el PDF en disco.
 - Calculo de checksum SHA-256.
-- Rechazo de documentos duplicados por checksum.
+- Rechazo de documentos duplicados por checksum (`409`, tambien si dos uploads
+  iguales llegan a la vez y los frena el indice unico de MongoDB).
 - Persistencia en MongoDB.
 - CRUD de documentos persistidos.
 - Respuestas de error compatibles con Problem Details para casos especificos.
@@ -385,7 +386,9 @@ de servicio a las replicas de `POST /extract`, que no la usan. `/ready`
 ## Endpoints principales
 
 - `POST /extract` (sin estado, ver la seccion siguiente)
-- `POST /api/v1/documents`
+- `POST /api/v1/documents` (multipart con `name` y `file`; el PDF se lee en
+  memoria con limite: `400` invalido, `409` duplicado, `413` demasiado grande,
+  `422` ilegible o falta un campo)
 - `GET /api/v1/documents`
 - `GET /api/v1/documents/{document_id}`
 - `PUT /api/v1/documents/{document_id}`

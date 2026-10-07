@@ -34,8 +34,10 @@ Responsabilidades:
 Archivos principales:
 
 - `app/api/routers/document.py`: CRUD de documentos
-- `app/api/routers/extract.py`: `POST /extract`, lee el PDF crudo o multipart en
-  memoria y rechaza por `Content-Length` antes de leer si supera el limite
+- `app/api/routers/extract.py`: `POST /extract`, PDF crudo o multipart
+- `app/api/uploads.py`: lectura de uploads para los dos routers. El PDF queda
+  en memoria (nunca en un archivo temporal) y un body demasiado grande se
+  rechaza con 413 por `Content-Length` o apenas se pasa del limite
 
 ## 2. Capa de logica de negocio
 

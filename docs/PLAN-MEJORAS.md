@@ -18,7 +18,7 @@ cualquier cambio de rendimiento y documentar lo que se descarta.
 - El CRUD (`/api/v1/documents`) quedo atras de `/extract`: se le aplicaron
   menos cuidados y tiene los problemas de la fase A.
 
-## Fase A: correcciones (el proyecto tiene que cumplir lo que dice)
+## Fase A: correcciones (el proyecto tiene que cumplir lo que dice) - HECHA (1.3.4)
 
 | # | Problema verificado | Que hacer | Como se comprueba |
 |---|---|---|---|
@@ -30,11 +30,16 @@ cualquier cambio de rendimiento y documentar lo que se descarta.
 
 Tiempo estimado: **3-4 horas**. Version resultante: 1.3.4 (correcciones).
 
+Hecho con TDD el 2026-10-07 (cada uno con su commit en rojo y en verde):
+A1 y A2 (`9612959`), A3 (`e3f80c6`), A4 (`640816e`) y A5 (`6d57a28`). La
+lectura de uploads quedo en `app/api/uploads.py`, compartida por los dos
+routers: eso adelanta la tarea B1.
+
 ## Fase B: arquitectura y codigo
 
 | # | Que mejorar | Por que |
 |---|---|---|
-| B1 | Un modulo `app/api/uploads.py` con la lectura de uploads (crudo y multipart, en memoria, con limite) para los dos routers. | Hoy esa logica esta solo en el router de `/extract` (DRY; la fase A la necesita en el CRUD). |
+| B1 | (Hecho en la fase A) Un modulo `app/api/uploads.py` con la lectura de uploads (crudo y multipart, en memoria, con limite) para los dos routers. | Hoy esa logica esta solo en el router de `/extract` (DRY; la fase A la necesita en el CRUD). |
 | B2 | `DocumentService` recibe el motor por la interfaz `PdfExtractor` en vez de llamar a `extract_pdf_text`. | Inversion de dependencias: hoy hay dos caminos al motor. |
 | B3 | Los uploads del CRUD pasan por la misma `AdmissionGate` que `/extract`. | Comparten el lock de PDFium por proceso: hoy un pico de uploads del CRUD bloquea hilos sin limite y le quita turnos a `/extract` (Bulkhead). |
 | B4 | Sacar los `try/except ValueError` del router del CRUD: errores de dominio con sus handlers RFC 9457, como en `/extract`. | Respuestas de error uniformes y routers mas finos. |
