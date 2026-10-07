@@ -38,6 +38,11 @@ Archivos principales:
 - `app/api/uploads.py`: lectura de uploads para los dos routers. El PDF queda
   en memoria (nunca en un archivo temporal) y un body demasiado grande se
   rechaza con 413 por `Content-Length` o apenas se pasa del limite
+- `app/api/dependencies.py`: la compuerta de admision del proceso, que
+  comparten `/extract` y el alta de documentos (los dos usan PDFium)
+- `app/utils/problem_details.py`: traduce cada error de dominio a su respuesta
+  RFC 9457 (400, 409, 413, 422, 503); los routers no atrapan errores
+  genericos
 
 ## 2. Capa de logica de negocio
 
@@ -58,6 +63,16 @@ Archivos principales:
 - `app/services/document_service.py`: alta, consulta, actualizacion y borrado
 - `app/services/extraction_service.py`: valida y extrae para `POST /extract`, sin
   persistir; registra cada extraccion en el log (bytes, paginas, ms)
+- `app/services/admission.py`: la compuerta de admision de cada proceso (cola
+  acotada, una extraccion por vez, el PDF mas liviano primero con limite de
+  espera, tiempo util con margen). Avisa lo que pasa a un observador
+  (`GateObserver`) sin depender de Prometheus
+- `app/utils/metrics.py`: el observador que publica las metricas de la
+  compuerta en `GET /metrics` (formato Prometheus)
+
+Los dos services reciben su motor por constructor: `ExtractionService` un
+`PdfExtractor` (Markdown) y `DocumentService` una funcion de texto plano. Se
+pueden probar con motores falsos y cambiar de motor sin tocar los routers.
 
 ## Nucleo
 
@@ -139,11 +154,13 @@ Indices principales:
 
 ## Flujo del alta
 
-1. El cliente envia `name` y `file`.
-2. El router lee los bytes del archivo.
+1. El cliente envia `name` y `file` (multipart).
+2. El router pide lugar en la compuerta de admision (503 si la cola esta
+   llena) y lee el archivo en memoria, con limite de tamano (413).
 3. El service valida extension, firma y tamano.
 4. El service calcula el checksum.
-5. Si el checksum ya existe, rechaza el documento.
+5. Si el checksum ya existe, rechaza el documento con 409 (tambien si dos
+   uploads iguales llegan a la vez y los frena el indice unico de MongoDB).
 6. Si el PDF es valido, extrae el texto en memoria.
 7. El repository guarda el documento en MongoDB.
 8. La API devuelve el documento ya procesado.
@@ -202,8 +219,13 @@ flowchart LR
 - Caidas: `restart: unless-stopped` levanta la replica sola (~15 s hasta
   healthy) y Traefik reintenta en otra los requests que no llegaron a
   procesarse. Traefik es el punto unico de falla del stack del TP.
-- Metricas: perfil `monitoreo` del compose (Prometheus + Grafana con las
-  metricas de Traefik). Procedimientos en `docs/RUNBOOK.md`.
+- Metricas: cada replica expone `GET /metrics` (cola, rechazos por motivo y
+  tiempo de extraccion); el perfil `monitoreo` del compose las junta con las de
+  Traefik en Prometheus y Grafana. Procedimientos en `docs/RUNBOOK.md`.
+- Healthcheck: un socket con `python -S -I` cada 10 s (cada 1 s al arrancar).
+  El anterior, con `urllib` cada 5 s, gastaba 12 % de un nucleo por replica.
+- Conexiones: uvicorn mantiene las inactivas 120 s, mas que Traefik (90 s),
+  para que Traefik nunca reuse una que se esta cerrando (502).
 
 ## Principios aplicados
 
@@ -232,3 +254,7 @@ El proyecto ya no usa SQLite ni SQLAlchemy. Toda la persistencia actual se hace 
 El modelo interno todavia conserva un campo `file_path` por compatibilidad tecnica, pero en los documentos nuevos no representa una ruta real subida por el usuario.
 
 Para los nuevos uploads se guarda solo una referencia logica interna tipo `memory://...`, ya que el procesamiento del PDF se realiza en memoria.
+
+Se reviso si se puede quitar (2026-10-07): el orquestador no lo usa, pero
+esta en la respuesta de la API, asi que quitarlo es un cambio incompatible
+(version 2.0). Queda para decidirlo con el equipo.

@@ -19,8 +19,13 @@ excede el tiempo util de vida.
 1. **Cola acotada por cantidad**: hasta `EXTRACT_MAX_PENDING` = 60 requests
    admitidos. Llena, el siguiente recibe `503` con `Retry-After` al instante,
    sin leer el PDF.
-2. **Una extraccion por vez** en un semaforo de asyncio: los admitidos esperan
-   sin ocupar un hilo, y el event loop sigue atendiendo HTTP (pista 4).
+2. **Una extraccion por vez**: los admitidos esperan su turno en asyncio sin
+   ocupar un hilo, y el event loop sigue atendiendo HTTP (pista 4). Desde la
+   1.4.0 el turno es del **PDF mas liviano** que espera, salvo que alguno ya
+   haya esperado 7,5 s (`EXTRACT_QUEUE_ORDER=size`,
+   `EXTRACT_PRIORITY_AGE_SECONDS`): con un nucleo por replica da +13 % de
+   throughput y la mitad de p50 (informe, experimento 14). En una maquina con
+   menos nucleos que replicas conviene `fifo`.
 3. **Tiempo util**: cuando le toca el turno, si el cliente ya se desconecto
    no se procesa; si lo que espero mas una extraccion promedio supera
    `EXTRACT_MAX_WAIT_SECONDS` = 25 s (menos que el timeout de 30 s), recibe
@@ -33,7 +38,10 @@ excede el tiempo util de vida.
    veces el promedio. Desde la 1.3.3 el tiempo util es de 25 s y no de 28:
    los 5 s hasta el timeout cubren lo que la compuerta no ve (devolver la
    respuesta por Traefik con la maquina saturada); con 28 s quedaban 2-17
-   timeouts sueltos por corrida.
+   timeouts sueltos por corrida. Desde la 1.4.0 tambien reserva para la
+   respuesta lo que tardo en llegar el PDF (la vuelta cuesta como la ida).
+4. El alta de documentos del CRUD pasa por la **misma compuerta**: los dos
+   endpoints usan PDFium y comparten el turno (Bulkhead).
 
 ## Alternativas medidas
 
@@ -46,7 +54,8 @@ excede el tiempo util de vida.
 | Cola de 60 con margen de 4 desvios, 28 s | ~30 % de exito, 0 a 17 timeouts por corrida | 1.3.2 |
 | Cola de 60 con margen de 4 desvios, 25 s | 29,1-29,6 % de exito, 0 timeouts en 3 corridas | elegida desde la 1.3.3 |
 | Cola de 90 con margen de 4 desvios | 1 y 72 timeouts | guarda mas de lo que entra en 28 s |
-| Cola por tamano (el PDF mas liviano primero) | spike: throughput -12 %, p95 de 12 a 17 s; Vegeta igual | los grandes se acumulan; revertida |
+| Cola por tamano con limite de 14 s | spike: throughput -12 %, p95 de 12 a 17 s; Vegeta igual | el limite era mas largo que la espera tipica; revertida |
+| Cola por tamano con limite de 7,5 s (emulacion, un nucleo por replica) | +13 % de throughput, p50 de ~4 a ~2,1 s, p90 y p95 ~1 s mas | elegida desde la 1.4.0 |
 | `inFlightReq` de Traefik (150, responde 429) | empate en exito, 0 timeouts | numero fijo sin tiempo util, 429 sin `Retry-After`, limite global y no por replica |
 
 ## Consecuencias

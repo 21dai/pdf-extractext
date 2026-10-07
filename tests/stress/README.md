@@ -147,7 +147,15 @@ dentro de la red de Docker y muestra la tabla contra el profesor y el SLO:
 ```powershell
 .\tests\stress\benchmark.ps1            # deja el stack levantado
 .\tests\stress\benchmark.ps1 -Apagar    # lo apaga al terminar
+.\tests\stress\benchmark.ps1 -Navegador # ademas, graficos en el navegador
 ```
+
+Con `-Navegador` levanta tambien Prometheus y Grafana, abre Grafana, muestra
+el dashboard de k6 en vivo en http://localhost:5665 durante el spike y al
+final abre los reportes HTML del spike y de Vegeta.
+
+`simulacion_spike.py` simula el spike con distintas politicas de cola (sin
+Docker): ver el experimento 14 del informe.
 
 ## D. Prueba de caos (`caos.sh`)
 

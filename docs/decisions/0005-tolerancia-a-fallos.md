@@ -22,6 +22,11 @@ a ~93 %.
   termina su cola; `stop_grace_period: 35s` (25 s de tiempo util mas margen).
 - Liveness (`/health`) separado de readiness (`/ready`): una caida de MongoDB
   no saca de servicio a las replicas de `/extract`.
+- Keep-alive de uvicorn (120 s) mayor que el de Traefik (90 s): si uvicorn
+  cerrara antes, Traefik podria reusar una conexion que se esta cerrando y el
+  request fallaria con 502 (errores sueltos medidos en el spike).
+- Healthcheck liviano cada 10 s, y cada 1 s durante el arranque para que una
+  replica reiniciada vuelva rapido al balanceo.
 
 ## Resultados
 

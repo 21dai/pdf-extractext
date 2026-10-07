@@ -25,12 +25,24 @@ Docker abierto pueden quedar sockets viejos y Docker no vuelve a arrancar (ver
 | CPU y memoria por contenedor | `docker stats` |
 | Rutas y replicas que ve Traefik | http://localhost:8080/dashboard/ |
 | Metricas en el tiempo | `docker compose --profile monitoreo up -d` y abrir http://localhost:3000 |
+| Cola y rechazos de una replica | `curl.exe http://127.0.0.1/metrics` (cada request va a una replica distinta) |
 
 Eventos de log utiles: `pdf_extraido` (bytes, paginas, duracion),
 `servicio_saturado` (503), `pdf_rechazado` (400/413/422),
 `cliente_desconectado` (el cliente se fue antes de su turno).
 
 ## Situaciones
+
+### La maquina tiene menos nucleos que replicas
+
+Con `EXTRACT_QUEUE_ORDER=size` (por defecto) cada replica atiende primero el
+PDF mas liviano; ayuda cuando cada replica tiene un nucleo propio. En una
+notebook con 4 nucleos para 5 replicas la espera tipica ya supera el limite
+de 7,5 s y conviene el orden de llegada:
+
+```powershell
+$env:EXTRACT_QUEUE_ORDER = "fifo"; docker compose up -d
+```
 
 ### Muchos 503 con `Retry-After`
 
