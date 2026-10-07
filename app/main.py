@@ -4,13 +4,14 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import document_router, extract_router
 from app.config import settings
 from app.services.admission import AdmissionGate
 from app.utils.database import create_tables, get_db
+from app.utils.metrics import PrometheusGateObserver
 from app.utils.problem_details import register_problem_details_handlers
 from app.utils.structured_logging import configure_logging
 
@@ -75,14 +76,23 @@ def create_app() -> FastAPI:
     )
 
     # Una compuerta por proceso: cada uno extrae un PDF por vez (PDFium).
+    metrics = PrometheusGateObserver()
     app.state.admission_gate = AdmissionGate(
         max_wait_seconds=settings.extract_max_wait_seconds,
         max_pending=settings.extract_max_pending,
         queue_order=settings.extract_queue_order,
         priority_age_seconds=settings.extract_priority_age_seconds,
+        observer=metrics,
         initial_service_seconds=INITIAL_SERVICE_SECONDS,
     )
     register_problem_details_handlers(app)
+
+    @app.get("/metrics", include_in_schema=False)
+    def read_metrics() -> Response:
+        """Metrics of this replica in the Prometheus format."""
+        body, content_type = metrics.render()
+        return Response(content=body, media_type=content_type)
+
     # Contrato del TP: la ruta es /extract, sin el prefijo versionado.
     app.include_router(extract_router)
     if settings.documents_api_enabled:

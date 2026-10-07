@@ -34,12 +34,34 @@ import math
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal, TypeVar
+from typing import Literal, Protocol, TypeVar
 
 from app.core.exceptions import ClientDisconnectedError, ServiceOverloadedError
 
 Result = TypeVar("Result")
 QueueOrder = Literal["fifo", "size"]
+
+
+class GateObserver(Protocol):
+    """Receives what happens in the gate (for metrics), without coupling to them."""
+
+    def queue_changed(self, pending: int) -> None: ...
+
+    def rejected(self, reason: str) -> None: ...
+
+    def extracted(self, seconds: float) -> None: ...
+
+
+class _NoObserver:
+    def queue_changed(self, pending: int) -> None:
+        pass
+
+    def rejected(self, reason: str) -> None:
+        pass
+
+    def extracted(self, seconds: float) -> None:
+        pass
+
 
 # Margen del chequeo del tiempo util: promedio + 4 desvios, como el RTO de TCP.
 # Con la maquina saturada un PDF grande tarda varias veces el promedio.
@@ -58,6 +80,7 @@ class AdmissionGate:
         queue_order: QueueOrder = "fifo",
         priority_age_seconds: float | None = None,
         clock: Callable[[], float] = time.monotonic,
+        observer: GateObserver | None = None,
     ):
         """Initialize the gate.
 
@@ -75,6 +98,8 @@ class AdmissionGate:
             priority_age_seconds: With "size", a request that waited this
                 long goes first; half the useful life if not given
             clock: Monotonic clock, injectable for tests
+            observer: Receives the queue size, the rejections and the
+                extraction times (the metrics); nothing if not given
         """
         self.max_wait_seconds = max_wait_seconds
         self.max_pending = max_pending
@@ -83,6 +108,7 @@ class AdmissionGate:
         self.smoothing = smoothing
         self.pending = 0
         self._clock = clock
+        self.observer: GateObserver = observer or _NoObserver()
         if priority_age_seconds is None:
             priority_age_seconds = max_wait_seconds / 2
         self.queue_order = queue_order
@@ -96,8 +122,10 @@ class AdmissionGate:
             ServiceOverloadedError: If `max_pending` requests are already in.
         """
         if self.pending >= self.max_pending:
+            self.observer.rejected("cola_llena")
             raise self._overloaded(self.pending * self.service_seconds)
         self.pending += 1
+        self.observer.queue_changed(self.pending)
         return Ticket(self, admitted_at=self._clock())
 
     def _overloaded(self, estimated_wait: float) -> ServiceOverloadedError:
@@ -198,6 +226,7 @@ class Ticket:
         if not self._released:
             self._released = True
             self._gate.pending -= 1
+            self._gate.observer.queue_changed(self._gate.pending)
 
     async def run(
         self,
@@ -220,6 +249,7 @@ class Ticket:
         await gate._turn.acquire(cost, self._admitted_at)
         try:
             if await is_disconnected():
+                gate.observer.rejected("cliente_desconectado")
                 raise ClientDisconnectedError()
             started = gate._clock()
             # El tiempo util cubre la respuesta, no solo la espera: si lo que
@@ -231,10 +261,13 @@ class Ticket:
                 waited + gate._pessimistic_service_seconds() + self._upload_seconds
             )
             if finish_estimate > gate.max_wait_seconds:
+                gate.observer.rejected("tiempo_util")
                 raise gate._overloaded(gate.pending * gate.service_seconds)
             try:
                 return await work()
             finally:
-                gate._observe(gate._clock() - started)
+                elapsed = gate._clock() - started
+                gate._observe(elapsed)
+                gate.observer.extracted(elapsed)
         finally:
             gate._turn.release()
