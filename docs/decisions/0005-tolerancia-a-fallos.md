@@ -19,7 +19,7 @@ a ~93 %.
   (procesar dos veces el mismo PDF no cambia nada). En `infrastructure` se
   aplica solo a `/extract`, no al CRUD.
 - **Apagado ordenado**: ante SIGTERM uvicorn deja de aceptar conexiones y
-  termina su cola; `stop_grace_period: 35s` (28 s de tiempo util mas margen).
+  termina su cola; `stop_grace_period: 35s` (25 s de tiempo util mas margen).
 - Liveness (`/health`) separado de readiness (`/ready`): una caida de MongoDB
   no saca de servicio a las replicas de `/extract`.
 

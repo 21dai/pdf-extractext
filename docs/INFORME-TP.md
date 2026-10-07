@@ -41,7 +41,7 @@ flowchart LR
     C[k6 / Vegeta] -->|POST /extract| T[Traefik v3<br/>round robin + reintentos]
     T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
     subgraph Replica [dentro de cada replica]
-        G[AdmissionGate<br/>cola de 60, tiempo util 28 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
+        G[AdmissionGate<br/>cola de 60, tiempo util 25 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
     end
     R --> G
 ```
@@ -50,7 +50,7 @@ flowchart LR
 |---|---|---|
 | `/extract` sin estado, sin base de datos | replicas intercambiables (12-Factor VI); se pueden escalar y reintentar | [0001](decisions/0001-contrato-de-extract.md) |
 | PDFium con su API cruda + Markdown por altura de letra | el motor mas rapido de los medidos, licencia Apache/BSD | [0002](decisions/0002-motor-de-extraccion-y-markdown.md) |
-| Cola de 60 por replica, tiempo util de 28 s, `503` con `Retry-After` | no gastar CPU en requests que van a vencer | [0003](decisions/0003-contrapresion.md) |
+| Cola de 60 por replica, tiempo util de 25 s, `503` con `Retry-After` | no gastar CPU en requests que van a vencer | [0003](decisions/0003-contrapresion.md) |
 | 5 replicas de 1 CPU, 1 proceso cada una, round robin | el CPU es el limite; mas procesos por replica no suman | [0004](decisions/0004-workers-y-replicas.md) |
 | Reinicio automatico, reintentos de Traefik, apagado ordenado | una replica caida no tira el servicio | [0005](decisions/0005-tolerancia-a-fallos.md) |
 | Medir dentro de la red de Docker, con Vegeta real, intercalando | numeros comparables y repetibles | [0006](decisions/0006-metodologia-de-medicion.md) |
@@ -132,6 +132,7 @@ Efecto de cada cambio, medido por separado (detalle en el anexo):
 | pypdfium2 5.14, ajustes del recolector de basura | dentro del ruido | no |
 | HAProxy en lugar de Traefik | mismo CPU, spike igual o peor, 28-49 timeouts en Vegeta | no |
 | 3 o 4 replicas en lugar de 5 | spike 12-13 req/s contra 14,3-14,5 | no |
+| Tiempo util de 25 s en lugar de 28 | mismo exito en Vegeta y 0 timeouts en 3 corridas | si |
 
 ## 5. Proceso de investigacion
 
@@ -874,3 +875,19 @@ En el experimento 5, con carga constante, 3 o 4 replicas rendian igual que
 
 Con el spike, 5 replicas es lo mejor, y el p95 queda por debajo del del
 profesor (8,80 s). Se mantienen 5.
+
+### Experimento 13: holgura del tiempo util (2026-10-07, version 1.3.3)
+
+Tres corridas seguidas de `benchmark.ps1` con la 1.3.2 dieron 4, 0 y 17
+timeouts en Vegeta: el margen pesimista cubre la extraccion, pero no lo que
+la compuerta no ve (devolver ~700 KB de Markdown por Traefik con la maquina
+saturada). Vegeta, tres rondas intercaladas:
+
+| Configuracion | Exito | Timeouts |
+|---|---|---|
+| Cola 60, tiempo util 28 s | 32,0 / 27,5 / 28,7 % | 0 / 0 / 2 |
+| **Cola 60, tiempo util 25 s** | **29,4 / 29,6 / 29,1 %** | **0 / 0 / 0** |
+| Cola 45, tiempo util 28 s | 22,9 / 27,7 / 27,3 % | 5 / 0 / 0 |
+
+Con 25 s el exito es practicamente el mismo, el mas estable de los tres, y
+no hubo ningun timeout. Se fijo `EXTRACT_MAX_WAIT_SECONDS=25`.

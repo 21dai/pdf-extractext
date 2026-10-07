@@ -163,7 +163,7 @@ flowchart LR
     C[Cliente: k6 / Vegeta] -->|POST /extract| T[Traefik<br/>round robin + reintentos]
     T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
     subgraph Replica [dentro de cada replica]
-        G[AdmissionGate<br/>cola de 60, tiempo util 28 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
+        G[AdmissionGate<br/>cola de 60, tiempo util 25 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
     end
     R --> G
     T -.metricas.-> PR[Prometheus] --> GR[Grafana]
