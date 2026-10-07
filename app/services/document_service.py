@@ -1,5 +1,6 @@
 """Document service - Business logic."""
 
+from collections.abc import Callable
 from typing import List, Optional
 
 from app.core import validators as v
@@ -19,15 +20,24 @@ class DocumentService:
 
     EXTRACT_ONLY_ON_UPLOAD_MESSAGE = CANNOT_REPROCESS_MESSAGE
 
-    def __init__(self, repository: DocumentRepository, max_pdf_size_bytes: int):
+    def __init__(
+        self,
+        repository: DocumentRepository,
+        max_pdf_size_bytes: int,
+        text_extractor: Callable[[bytes], str] = extract_pdf_text,
+    ):
         """Initialize service with the document repository.
 
         Args:
             repository: Persistence adapter for documents
             max_pdf_size_bytes: Maximum allowed PDF size in bytes.
+            text_extractor: Engine that turns PDF bytes into plain text;
+                PDFium if not given. The CRUD stores plain text, /extract
+                returns Markdown.
         """
         self.repository = repository
         self.max_pdf_size_bytes = max_pdf_size_bytes
+        self.text_extractor = text_extractor
 
     def create_document(
         self, name: str, original_filename: str | None, file_content: bytes
@@ -50,7 +60,7 @@ class DocumentService:
         if self.repository.get_by_checksum(checksum):
             raise DuplicateDocumentError()
 
-        extracted_text = extract_pdf_text(file_content)
+        extracted_text = self.text_extractor(file_content)
         document = Document(
             name=normalized_name,
             original_filename=normalized_filename,
