@@ -2,20 +2,24 @@
 
 from typing import List
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pymongo.database import Database
+from starlette.concurrency import run_in_threadpool
 
+from app.api.uploads import (
+    form_file,
+    form_text,
+    is_multipart,
+    missing_field,
+    multipart_form,
+)
 from app.config import settings
-from app.core.exceptions import DocumentNotFoundError
+from app.core.exceptions import (
+    DocumentNotFoundError,
+    InvalidPdfError,
+    PdfTooLargeError,
+    PdfUnreadableError,
+)
 from app.core.validators import MAX_PAGINATION_LIMIT
 from app.repositories import DocumentRepository
 from app.schemas import DocumentResponse, DocumentUpdate
@@ -24,9 +28,12 @@ from app.utils.database import get_db
 
 router = APIRouter(prefix="/documents", tags=["documentos"])
 
-# Los endpoints son sincronicos a proposito: el service usa PyMongo y PDFium,
-# que bloquean. Declarados con `def`, FastAPI los ejecuta en un pool de hilos
-# y el event loop sigue atendiendo otras peticiones mientras se extrae un PDF.
+# El service usa PyMongo y PDFium, que bloquean: los endpoints son `def` y
+# FastAPI los corre en un pool de hilos. El alta es la excepcion: es async para
+# leer el upload en memoria (ver app/api/uploads.py) y despues pasa el trabajo
+# bloqueante al pool.
+
+_PROBLEM = {"description": "Problem details (RFC 9457)"}
 
 
 def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
@@ -40,24 +47,53 @@ def get_document_service(db: Database = Depends(get_db)) -> DocumentService:
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear y procesar un nuevo documento",
+    responses={400: _PROBLEM, 409: _PROBLEM, 413: _PROBLEM, 422: _PROBLEM},
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["name", "file"],
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Nombre del documento",
+                            },
+                            "file": {
+                                "type": "string",
+                                "format": "binary",
+                                "description": "Archivo PDF a registrar",
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
 )
-def create_document(
-    name: str = Form(..., description="Nombre del documento"),
-    file: UploadFile = File(..., description="Archivo PDF a registrar"),
+async def create_document(
+    request: Request,
     service: DocumentService = Depends(get_document_service),
 ) -> DocumentResponse:
     """Create a new document from an uploaded PDF.
 
-    Delegates validation and business logic to the service, translating
-    domain validation errors to HTTP 400.
+    El PDF se lee en memoria y con limite de tamano. Los errores del PDF
+    (400, 413, 422) los traducen los handlers RFC 9457; el resto de las
+    validaciones del service responde 400.
     """
+    if not is_multipart(request):
+        raise missing_field("file")  # sin multipart no puede venir el archivo
+    async with multipart_form(request, service.max_pdf_size_bytes) as form:
+        name = form_text(form, "name")
+        content, filename = await form_file(form, "file")
     try:
-        file_content = file.file.read()
-        return service.create_document(name, file.filename, file_content)
+        return await run_in_threadpool(service.create_document, name, filename, content)
+    except InvalidPdfError, PdfTooLargeError, PdfUnreadableError:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    finally:
-        file.file.close()
 
 
 @router.get(
