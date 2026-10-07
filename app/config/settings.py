@@ -1,6 +1,6 @@
 """Application settings and configuration."""
 
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,9 +47,6 @@ class Settings(BaseSettings):
     # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
     # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.
     extract_max_pending: int = 30
-    # Orden de la cola de /extract: "size" atiende primero el PDF mas liviano
-    # (mediana de latencia mas baja); "fifo", por orden de llegada.
-    extract_queue_order: Literal["fifo", "size"] = "size"
 
     # MongoDB Auth
     root_username: str = ""
