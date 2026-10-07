@@ -139,6 +139,16 @@ docker run --rm --network pdf-extractext-tp_default -v "${PWD}/tests/stress:/scr
 Imprime una linea `RESULTADO ok=... rps=... p50=... p95=...`. `DUR` cambia la
 duracion (default `60s`).
 
+## Todo junto (`benchmark.ps1`)
+
+Limpia, levanta el stack, espera las 5 replicas, corre el spike y Vegeta
+dentro de la red de Docker y muestra la tabla contra el profesor y el SLO:
+
+```powershell
+.\tests\stress\benchmark.ps1            # deja el stack levantado
+.\tests\stress\benchmark.ps1 -Apagar    # lo apaga al terminar
+```
+
 ## D. Prueba de caos (`caos.sh`)
 
 Corre el spike y a los N segundos tira una replica. Desde Git Bash, con el

@@ -93,6 +93,7 @@ renombrar `%LOCALAPPDATA%\Docker\run` y `%LOCALAPPDATA%\docker-secrets-engine`
 
 | Prueba | Comando | Que mide |
 |---|---|---|
+| Todo el benchmark | `.\tests\stress\benchmark.ps1` | spike + Vegeta y tabla contra el profesor |
 | Spike (k6) | ver `tests/stress/README.md`, seccion A | throughput y latencias; termina con codigo 99 si no se cumple el SLO |
 | Carga fija (Vegeta) | seccion B | exito y timeouts; termina con codigo 1 si algun request vence |
 | Capacidad por replica | seccion C (`escala.js`) | req/s con N replicas |

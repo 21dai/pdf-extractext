@@ -15,7 +15,16 @@ El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion tr
 
 ## TP de carga y estres: reproducir el benchmark
 
-Solo hace falta Docker. Desde PowerShell, en la raiz del repo:
+Solo hace falta Docker. Todo en un comando (PowerShell o la terminal de VS
+Code, en la raiz del repo): limpia, levanta el stack, corre el spike y Vegeta
+y muestra la tabla contra el profesor.
+
+```powershell
+.\tests\stress\benchmark.ps1
+```
+
+`-Apagar` baja el stack al terminar y `-SinBuild` no reconstruye la imagen.
+Los mismos pasos, uno por uno:
 
 ```powershell
 # 1. Traefik + 5 replicas de POST /extract (1 CPU y 1 GB cada una)
@@ -609,6 +618,7 @@ Convenciones vigentes:
 - `docs/REVISION_ENUNCIADO.md`: chequeo punto por punto contra el enunciado.
 - `docs/DEMO.md`: guion para mostrar la API y el TP en clase.
 - `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.
+- `docs/MEJORAS-RENDIMIENTO.md`: que mas se puede hacer para superar al profesor, con tiempos estimados.
 - `tests/stress/README.md`: como correr las pruebas de carga del TP.
 
 ## Limitacion conocida
