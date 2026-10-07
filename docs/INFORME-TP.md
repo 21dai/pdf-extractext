@@ -147,6 +147,9 @@ Efecto de cada cambio, medido por separado (detalle en el anexo):
 | HAProxy en lugar de Traefik | mismo CPU, spike igual o peor, 28-49 timeouts en Vegeta | no |
 | 3 o 4 replicas en lugar de 5 | spike 12-13 req/s contra 14,3-14,5 | no |
 | Tiempo util de 25 s en lugar de 28 | mismo exito en Vegeta y 0 timeouts en 3 corridas | si |
+| Mas liviano primero con limite de 7,5 s (emulacion, un nucleo por replica) | +13 % de throughput, p50 de ~4 a ~2,1 s; p90 y p95 ~1 s mas | si (por defecto) |
+| Keep-alive de uvicorn mayor que el de Traefik | sin 502 sueltos | si |
+| Healthcheck liviano cada 10 s | de 12,4 % a ~3 % de un nucleo por replica | si |
 
 ## 5. Proceso de investigacion
 
@@ -906,3 +909,86 @@ saturada). Vegeta, tres rondas intercaladas:
 
 Con 25 s el exito es practicamente el mismo, el mas estable de los tres, y
 no hubo ningun timeout. Se fijo `EXTRACT_MAX_WAIT_SECONDS=25`.
+
+### Experimento 14: simulacion del spike y emulacion a escala (2026-10-07)
+
+Para no depender del ruido de la notebook se escribio una simulacion del
+spike (`tests/stress/simulacion_spike.py`): 100 usuarios con las rampas del profesor, 5 replicas con round robin y
+el costo medido de cada PDF. Con los costos multiplicados por 2,2 (lo que
+cuesta cada PDF con 5 replicas en la notebook) reproduce lo medido: FIFO da
+12,6 req/s, p50 7,4 s y p95 11 s.
+
+| Politica, con un nucleo por replica (simulada) | req | req/s | p50 | p90 | p95 | max |
+|---|---|---|---|---|---|---|
+| Profesor (medido por el) | 1.037 | 25,35 | 1,88 | 7,83 | 8,80 | 13,94 |
+| FIFO | 1.000 | 25,00 | 3,46 | 4,86 | 5,07 | 5,89 |
+| Mas liviano primero, sin limite | 1.072 | 26,80 | 0,36 | 12,91 | 14,85 | 19,12 |
+| Mas liviano primero, limite 7 s | 1.032 | 25,80 | 1,42 | 7,53 | 7,68 | 8,34 |
+| Mas liviano primero, limite 8 s | 1.040 | 26,00 | 0,97 | 8,52 | 8,66 | 9,23 |
+
+Esto explica el experimento 8: con 100 usuarios cada replica tiene ~20
+requests esperando, y si el limite de espera es menor que la espera tipica
+todos lo superan y la cola vuelve a ser por llegada; con 14 s los grandes
+quedaban demasiado atras. En la notebook, con 5 replicas, la espera tipica ya
+es de ~8 s y ningun limite ayuda.
+
+Para medirlo de verdad se emulo una maquina con un nucleo por replica: 2
+replicas (que si tienen nucleo propio en la notebook) con 40 usuarios, los
+mismos 20 por replica del spike del profesor. Tres rondas intercaladas:
+
+| Politica | req/s (2 replicas) | Proyectado a 5 | p50 | p90 | p95 | max |
+|---|---|---|---|---|---|---|
+| FIFO | 7,21 / 7,74 / 7,61 | 18,0 / 19,4 / 19,0 | 4,29 / 3,98 / 3,92 | 7,17 / 6,12 / 5,98 | 7,93 / 6,86 / 7,01 | 8,56 / 8,11 / 8,68 |
+| Mas liviano primero, 7,5 s | 8,42 / 8,57 / 8,35 | **21,1 / 21,4 / 20,9** | **2,16 / 2,07 / 2,26** | 8,08 / 8,03 / 8,17 | 8,25 / 8,28 / 8,64 | 9,04 / 9,43 / 9,49 |
+| Mas liviano primero, 6 s | 8,24 / 8,32 / 8,00 | 20,6 / 20,8 / 20,0 | 3,54 / 4,07 / 4,53 | 6,88 / 6,83 / 6,54 | 7,15 / 6,99 / 6,70 | 8,61 / 8,05 / 7,18 |
+
+Con 7,5 s: +13 % de throughput y la mitad de p50, a cambio de ~1 s mas de
+p90 y p95. Se adopto como valor por defecto (`EXTRACT_QUEUE_ORDER=size`,
+`EXTRACT_PRIORITY_AGE_SECONDS=7.5`) porque la evaluacion corre en una
+maquina con un nucleo por replica; en una con menos nucleos que replicas
+conviene `EXTRACT_QUEUE_ORDER=fifo`. Proyectado con la velocidad por nucleo
+de la notebook da ~21 req/s: superar los 25,35 del profesor depende de que su
+CPU sea mas rapida por nucleo, cosa habitual en una PC de escritorio contra
+una notebook de 15 W.
+
+### Experimento 15: errores 502 sueltos (2026-10-07)
+
+En algunos spikes aparecia un error aislado (0,2 % en una corrida, un 502 en
+la emulacion). uvicorn cierra las conexiones inactivas a los 5 s y Traefik
+las mantiene hasta 90 s para reusarlas: si las reusa justo cuando uvicorn las
+cierra, el request falla. Ahora uvicorn las mantiene 120 s
+(`HTTP_KEEP_ALIVE_SECONDS`, version 1.3.4). En las corridas posteriores no
+volvio a aparecer ningun 502.
+
+### Experimento 16: el healthcheck gastaba CPU (2026-10-07)
+
+Cada healthcheck arrancaba un `python` nuevo que importaba `urllib` (que a su
+vez carga ssl y email). Medido en una replica en reposo, CPU del cgroup en
+60 s:
+
+| Healthcheck | CPU en 60 s | Parte de un nucleo |
+|---|---|---|
+| Sin healthcheck | 0,19 s | 0,3 % |
+| `urllib` cada 5 s (el de antes) | 7,41 s | **12,4 %** |
+| `urllib` cada 10 s | 3,86 s | 6,4 % |
+| Socket con `python -S -I` cada 5 s | 3,56 s | 5,9 % |
+
+Con 5 replicas, el de antes gastaba **mas de medio nucleo** solo en
+chequearse, en una maquina de 4. Ahora es el liviano cada 10 s (~3 % por
+replica, ~15 % de un nucleo entre las 5), con un chequeo por segundo durante
+el arranque para que una replica reiniciada vuelva rapido al balanceo.
+
+### Experimento 17: margen para la vuelta de la respuesta (2026-10-07)
+
+Con la notebook muy lenta volvieron los timeouts en Vegeta con la 1.3.3 y la
+1.3.4 (2, 7, 13 y 55 por corrida). La compuerta controla la espera y la
+extraccion, pero no el envio de la respuesta. Ahora reserva tambien lo que
+tardo en llegar el PDF, como estimacion de la vuelta: con la CPU saturada las
+dos cosas tardan (`Ticket.body_received`).
+
+La medicion A/B se tuvo que cortar: durante la corrida, un servidor de
+TypeScript de otro proyecto abierto en la PC usaba mas de un nucleo entero y
+los numeros salieron fuera de escala (5 req/s y 870 timeouts con FIFO). El
+cambio queda adoptado por como esta construido (solo puede rechazar antes,
+nunca procesar algo que antes se rechazaba) y queda pendiente medirlo con la
+maquina limpia.
