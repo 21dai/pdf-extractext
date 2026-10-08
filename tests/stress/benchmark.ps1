@@ -10,12 +10,17 @@
 #   .\tests\stress\benchmark.ps1 -Navegador # ademas, graficos en el navegador:
 #        dashboard de k6 en vivo (http://localhost:5665), reporte HTML del spike
 #        y Grafana con las metricas de Traefik (http://localhost:3000)
+#   .\tests\stress\benchmark.ps1 -Orden fifo # cola por orden de llegada: lo mejor
+#        en una maquina con menos nucleos que replicas (la notebook del grupo);
+#        por defecto "size" (primero el PDF mas liviano, con un nucleo por replica)
 #
 # Solo necesita Docker Desktop abierto.
 param(
     [switch]$Apagar,
     [switch]$SinBuild,
-    [switch]$Navegador
+    [switch]$Navegador,
+    [ValidateSet("size", "fifo")]
+    [string]$Orden = ""
 )
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -34,6 +39,7 @@ Paso "1/4  Limpiando contenedores anteriores"
 docker compose --profile monitoreo down --remove-orphans
 
 Paso "2/4  Levantando Traefik + 5 replicas"
+if ($Orden) { $env:EXTRACT_QUEUE_ORDER = $Orden; Write-Host "  Orden de la cola: $Orden" }
 if ($SinBuild) { docker compose up -d } else { docker compose up --build -d }
 if ($Navegador) { docker compose --profile monitoreo up -d prometheus grafana }
 if ($LASTEXITCODE -ne 0) { Write-Host "No se pudo levantar el stack. Esta abierto Docker Desktop?" -ForegroundColor Red; exit 1 }

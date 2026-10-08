@@ -992,3 +992,25 @@ los numeros salieron fuera de escala (5 req/s y 870 timeouts con FIFO). El
 cambio queda adoptado por como esta construido (solo puede rechazar antes,
 nunca procesar algo que antes se rechazaba) y queda pendiente medirlo con la
 maquina limpia.
+
+### Experimento 18: orden de la cola con 5 replicas en la notebook (2026-10-07)
+
+Con la maquina limpia (sin el servidor de TypeScript del experimento 17), la
+1.4.0 con 5 replicas, cinco spikes por configuracion intercalados:
+
+| Orden | req/s | p50 | p95 | max |
+|---|---|---|---|---|
+| FIFO | 11,86 / 12,22 / 11,87 / 12,01 / 11,86 | 6,7-7,2 s | 9,7-10,7 s | 10,1-11,6 s |
+| Mas liviano primero, 7,5 s | 19,35 / 11,57 / 9,61 / 10,81 / 10,69 | 3,3-10,0 s | 8,3-14,4 s | 9,1-15,5 s |
+
+Medianas: FIFO 11,87 req/s y p95 10,0 s; mas liviano primero 10,81 req/s y
+p95 12,1 s, y mucho mas variable (la primera ronda, 19,35 req/s, no se
+repitio). En Vegeta: 44,3 / 30,3 % contra 29,0 / 29,8 %, sin timeouts en
+ninguno.
+
+Confirma la simulacion y el experimento 8: **en una maquina con menos nucleos
+que replicas conviene FIFO**; con un nucleo por replica, mas liviano primero
+(experimento 14). Para que el benchmark del profesor de 25,35 req/s con 5
+replicas de 1 CPU sea posible, su maquina tiene que tener al menos 5 nucleos
+libres: por eso el valor por defecto es `size`. En la notebook del grupo se
+usa `EXTRACT_QUEUE_ORDER=fifo` (`benchmark.ps1 -Orden fifo`).

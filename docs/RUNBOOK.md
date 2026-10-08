@@ -42,7 +42,11 @@ de 7,5 s y conviene el orden de llegada:
 
 ```powershell
 $env:EXTRACT_QUEUE_ORDER = "fifo"; docker compose up -d
+.\tests\stress\benchmark.ps1 -Orden fifo      # o el benchmark directo
 ```
+
+Medido en la notebook con 5 replicas (informe, experimento 18): FIFO 11,9
+req/s y p95 10 s; mas liviano primero 10,8 req/s y p95 12,1 s.
 
 ### Muchos 503 con `Retry-After`
 
