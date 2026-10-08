@@ -98,7 +98,14 @@ D4 depende de conseguir una PC con mas nucleos.
 
 Tiempo estimado: **3 horas** sin D4.
 
-## Fase E: cierre
+## Fase E: cierre - HECHA (1.4.0)
+
+Version 1.4.0 con su tag e imagen, `infrastructure` actualizado, informe
+(experimentos 14 a 18), ADR 0007, arquitectura, runbook y README al dia.
+Medicion final con la maquina limpia (experimento 18): en la notebook FIFO
+rinde mas que "mas liviano primero"; `benchmark.ps1 -Orden fifo` lo elige
+para las demos.
+
 
 - Version final (1.4.0), tags, imagen y `infrastructure` actualizado.
 - `REVISION_ENUNCIADO.md`, `ARCHITECTURE.md`, ADRs y README al dia.
