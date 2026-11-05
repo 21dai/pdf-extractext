@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 class ExtractionService:
     """Validate a PDF and extract its content, without persisting anything.
 
-    A diferencia de DocumentService, no usa repositorio: no calcula checksum,
-    no busca duplicados y no escribe en MongoDB. Por eso puede escalar en
-    replicas sin estado compartido (12-Factor VI).
+    No calcula checksum, no busca duplicados ni guarda el documento: eso lo
+    hace document-store, coordinado por el orquestador (ADR-0008). Por eso
+    puede escalar en replicas sin estado compartido (12-Factor VI).
     """
 
     def __init__(self, max_pdf_size_bytes: int, extractor: PdfExtractor | None = None):

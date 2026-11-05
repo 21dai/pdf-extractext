@@ -12,13 +12,19 @@ class Settings(BaseSettings):
     # El .env se comparte con docker-compose, que necesita variables que no son
     # de la aplicacion (por ejemplo IMAGE_TAG, el tag de la imagen). Se ignoran
     # en vez de hacer fallar el arranque.
+    #
+    # Lo mismo con las variables de base de datos que el stack de
+    # infrastructure todavia le pasa a este servicio (DATABASE_URL,
+    # DATABASE_NAME, DATABASE_TIMEOUT_MS): desde la 2.0.0 no las usa
+    # (ADR-0008), pero no hacen fallar el arranque hasta que se quiten del
+    # compose. Lo prueba tests/api/test_extraction_only_mode.py.
     model_config = SettingsConfigDict(
         env_file=".env", case_sensitive=False, extra="ignore"
     )
 
     # Application
     app_name: str = "API de Extraccion de PDF"
-    app_version: str = "1.4.0"
+    app_version: str = "2.0.0"
     debug: bool = False
     # Nivel de los logs JSON que se escriben en stdout (12-Factor XI).
     log_level: str = "INFO"
@@ -34,14 +40,9 @@ class Settings(BaseSettings):
     # mayor que el de Traefik (90 s) para que no reuse una que se esta cerrando.
     http_keep_alive_seconds: int = 120
 
-    # Database
-    database_url: str = "mongodb://localhost:27017"
-    database_name: str = "pdf_extract"
-    database_timeout_ms: int = 3000
+    # Extraccion. El servicio no guarda nada: sus replicas no comparten
+    # estado (12-Factor VI).
     max_pdf_size_bytes: int = 10 * 1024 * 1024
-    # Con false el servicio solo expone POST /extract: no usa MongoDB, arranca
-    # sin base de datos y sus replicas no comparten estado (12-Factor VI).
-    documents_api_enabled: bool = True
     # Backpressure de POST /extract: tiempo util de un request. Si lo que ya
     # espero mas una extraccion promedio lo supera, se responde 503 sin
     # procesarlo. Tiene que quedar por debajo del timeout de los clientes
@@ -59,12 +60,7 @@ class Settings(BaseSettings):
     extract_queue_order: Literal["fifo", "size"] = "size"
     extract_priority_age_seconds: float = 7.5
 
-    # MongoDB Auth
-    root_username: str = ""
-    root_password: str = ""
-
     # API
-    api_v1_prefix: str = "/api/v1"
     api_docs_url: Optional[str] = "/docs"
     api_redoc_url: Optional[str] = "/redoc"
     api_openapi_url: Optional[str] = "/openapi.json"

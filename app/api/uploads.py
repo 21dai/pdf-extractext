@@ -1,6 +1,6 @@
 """Reading of uploaded PDFs in memory, cut off as soon as they exceed the limit.
 
-Lo usan los dos routers que reciben PDFs (`/extract` y el alta de documentos):
+Lo usa `POST /extract`, el unico endpoint que recibe PDFs:
 
 - El PDF nunca se escribe a disco (requisito 8): Starlette pasa a un archivo
   temporal las partes de un multipart de mas de 1 MB; aca el umbral es el
@@ -91,14 +91,6 @@ async def form_file(form: FormData, field: str) -> tuple[bytes, str | None]:
     if not isinstance(upload, UploadFile):
         raise missing_field(field)
     return await upload.read(), upload.filename
-
-
-def form_text(form: FormData, field: str) -> str:
-    """Value of a text field, or a 422 if it is missing."""
-    value = form.get(field)
-    if not isinstance(value, str):
-        raise missing_field(field)
-    return value
 
 
 def is_multipart(request: Request) -> bool:

@@ -10,11 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 
 from app.core.exceptions import (
-    CannotReprocessError,
     ClientDisconnectedError,
-    DocumentNotFoundError,
-    DocumentValidationError,
-    DuplicateDocumentError,
     InvalidPdfError,
     PdfTooLargeError,
     PdfUnreadableError,
@@ -109,28 +105,8 @@ def register_problem_details_handlers(app: FastAPI) -> None:
             media_type="application/problem+json",
         )
 
-    @app.exception_handler(DocumentNotFoundError)
-    async def document_not_found_handler(request: Request, exc: DocumentNotFoundError):
-        return await _domain_exception_response(request, exc, status.HTTP_404_NOT_FOUND)
-
-    @app.exception_handler(DocumentValidationError)
-    async def document_validation_handler(
-        request: Request, exc: DocumentValidationError
-    ):
-        return await _domain_exception_response(
-            request, exc, status.HTTP_400_BAD_REQUEST
-        )
-
-    @app.exception_handler(DuplicateDocumentError)
-    async def duplicate_document_handler(request: Request, exc: DuplicateDocumentError):
-        return await _domain_exception_response(request, exc, status.HTTP_409_CONFLICT)
-
-    @app.exception_handler(CannotReprocessError)
-    async def cannot_reprocess_handler(request: Request, exc: CannotReprocessError):
-        return await _domain_exception_response(request, exc, status.HTTP_409_CONFLICT)
-
-    # Los routers del CRUD capturan ValueError y responden 400 ellos mismos;
-    # estos handlers aplican a /extract, que deja propagar los errores.
+    # Rechazos de POST /extract: el router deja propagar los errores de
+    # dominio y se traducen aca.
     @app.exception_handler(InvalidPdfError)
     async def invalid_pdf_handler(request: Request, exc: InvalidPdfError):
         return await _rejected_pdf_response(request, exc, status.HTTP_400_BAD_REQUEST)
