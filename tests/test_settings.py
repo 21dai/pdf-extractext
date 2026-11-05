@@ -18,7 +18,6 @@ def test_settings_loads_the_committed_env_example():
 
     assert settings.app_name
     assert settings.app_version
-    assert settings.database_name
 
 
 def test_settings_ignores_variables_that_are_not_application_settings(tmp_path):

@@ -437,7 +437,7 @@ class TestQueueSettings:
         assert defaults.extract_queue_order == "size"
         assert defaults.extract_priority_age_seconds == 7.5
 
-    def test_the_app_builds_its_gate_from_the_settings(self, db, monkeypatch):
+    def test_the_app_builds_its_gate_from_the_settings(self, monkeypatch):
         from app.config import settings
         from app.main import create_app
 

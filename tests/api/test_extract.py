@@ -95,11 +95,6 @@ class TestExtractIsStateless:
         assert second.status_code == 200
         assert first.json() == second.json()
 
-    def test_extracting_does_not_register_documents(self, client: TestClient):
-        post_raw(client, MINIMAL_PDF_BYTES)
-
-        assert client.get("/api/v1/documents").json() == []
-
 
 class TestExtractKeepsUploadsInMemory:
     """Pista 1 de la consigna: leer el PDF sin volcarlo a disco."""

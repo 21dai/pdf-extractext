@@ -14,7 +14,7 @@ def preflight(client: TestClient, origin: str):
     )
 
 
-def test_by_default_any_origin_is_allowed_without_credentials(db):
+def test_by_default_any_origin_is_allowed_without_credentials():
     """Con `*` el navegador no manda cookies: la API no las usa."""
     with TestClient(create_app()) as client:
         response = preflight(client, "https://cualquier-sitio.example")
@@ -24,7 +24,7 @@ def test_by_default_any_origin_is_allowed_without_credentials(db):
 
 
 def test_configured_origins_are_the_only_ones_allowed(
-    db, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setattr(settings, "cors_allow_origins", ["http://localhost:3000"])
 
