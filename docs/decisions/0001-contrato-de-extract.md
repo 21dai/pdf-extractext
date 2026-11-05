@@ -3,6 +3,13 @@
 - Estado: aceptada
 - Fecha: 2026-10-02 (version 1.2.0)
 
+> **Actualizacion (issue #31, version 2.0.0):** el contrato de `POST /extract`
+> sigue vigente sin cambios. Lo que ya no existe es el CRUD
+> `/api/v1/documents` ni `DOCUMENTS_API_ENABLED`: el modo solo extractor paso a
+> ser el unico y el servicio no usa MongoDB. Ver
+> [ADR 0008](0008-retirar-crud-y-mongodb.md). El texto de abajo queda como se
+> decidio en su momento.
+
 ## Contexto
 
 La consigna del TP exige `POST /extract`, que recibe un PDF (multipart o

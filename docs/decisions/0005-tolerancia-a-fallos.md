@@ -3,6 +3,12 @@
 - Estado: aceptada
 - Fecha: 2026-10-06
 
+> **Actualizacion (issue #31, version 2.0.0):** el servicio ya no tiene CRUD ni
+> MongoDB ([ADR 0008](0008-retirar-crud-y-mongodb.md)). Lo que dice abajo sobre
+> el CRUD y sobre una caida de MongoDB ya no aplica: `/health` y `/ready` solo
+> dicen que el proceso responde. Los reintentos de Traefik, el reinicio
+> automatico y el apagado ordenado siguen vigentes.
+
 ## Contexto
 
 Una replica puede caerse (falla del proceso) o apagarse (deploy, `docker

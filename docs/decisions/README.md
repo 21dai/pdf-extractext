@@ -13,3 +13,4 @@ estan en [INFORME-TP.md](../INFORME-TP.md).
 | [0005](0005-tolerancia-a-fallos.md) | Reinicio automatico, reintentos de Traefik y apagado ordenado |
 | [0006](0006-metodologia-de-medicion.md) | Medir dentro de la red de Docker, con Vegeta real e intercalando |
 | [0007](0007-metricas-propias.md) | Metricas propias de cada replica en `/metrics`, con un observador de la compuerta |
+| [0008](0008-retirar-crud-y-mongodb.md) | Retirar el CRUD y MongoDB: el servicio solo extrae y la persistencia vive en document-store (2.0.0) |
