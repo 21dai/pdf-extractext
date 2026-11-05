@@ -1,32 +1,20 @@
 # Guia de desarrollo
 
 Detalles para trabajar en el servicio: estructura de Docker y versionado,
-persistencia, ejemplos con curl, calidad de codigo y comandos utiles. Lo
-basico para levantarlo esta en el [README](../README.md).
+ejemplos con curl, calidad de codigo y comandos utiles. Lo basico para
+levantarlo esta en el [README](../README.md).
 
-## Persistencia
+## Sin persistencia
 
-La base de datos usada es MongoDB.
+El servicio no tiene base de datos: recibe el PDF, extrae el texto en memoria
+y lo devuelve. Guardar documentos (con su checksum, sin duplicados) es trabajo
+de **document-store**, y el que los coordina es el orquestador: llama a
+`POST /extract` de este servicio y despues a `POST /api/v1/documents` de
+document-store.
 
-Colecciones principales:
-
-- `documents`
-- `counters`
-
-Campos principales guardados por documento:
-
-- `id`
-- `name`
-- `original_filename`
-- `file_path`
-- `checksum`
-- `file_size`
-- `extracted_text`
-- `is_processed`
-- `created_at`
-- `updated_at`
-
-Nota importante: el PDF original no se guarda como binario en MongoDB. El texto se extrae desde los bytes recibidos en memoria y se persisten los metadatos junto con el texto extraido.
+Hasta la 1.4.0 este servicio guardaba los documentos en MongoDB (colecciones
+`documents` y `counters`) y exponia un CRUD en `/api/v1/documents`. Se retiro
+en la 2.0.0: ver [ADR-0008](decisions/0008-retirar-crud-y-mongodb.md).
 
 ## Docker
 
@@ -37,17 +25,14 @@ Los archivos de infraestructura Docker se centralizaron en la carpeta `docker/` 
 | Archivo original | Nueva ubicacion |
 |------------------|-----------------|
 | `Dockerfile` | `docker/Dockerfile` |
-| `docker-compose.db.yml` | `docker/docker-compose.db.yml` |
 | `docker-compose.yml` | `docker/docker-compose.yml` |
 
 `.dockerignore` permanece en la raiz y ahora ignora el directorio `docker/` completo.
 
-`docker-compose.yml` no hardcodea ningun host de backing service: `DATABASE_URL` se pasa tal cual viene de `.env` (factor de configuracion 12-factor). El host que va en `.env` depende de donde corra la API:
-
-- API dentro de Docker (`make up` / `docker compose -f docker/docker-compose.yml up`): usar el nombre de servicio de la red Docker, `mongo:27017`.
-- API corriendo localmente fuera de Docker (`python main.py`) contra el contenedor de Mongo expuesto: usar `localhost:27017`.
-
-Cambiar de entorno es solo editar `.env`, sin tocar ningun archivo versionado.
+El servicio no tiene backing services: ni `docker/docker-compose.yml` ni el
+`docker-compose.yml` de la raiz levantan una base de datos. La configuracion
+sale de `.env` (factor III de 12-factor); cambiar de entorno es solo editar
+`.env`, sin tocar ningun archivo versionado.
 
 ### Versionado de la imagen (factor 5: build, release, run)
 
@@ -68,7 +53,7 @@ image: pdf-extractext:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual es `1.4.0`. La `1.0.0` fue la primera release estable; la
+- La version actual es `2.0.0`. La `1.0.0` fue la primera release estable; la
   `1.0.1` sumo el hardening del contenedor (issue #18), sin cambios de comportamiento;
   la `1.1.0` cambia la extraccion a `pypdfium2` (unas 15 veces mas rapida) y agrega
   `WEB_CONCURRENCY` para correr varios procesos. Es MINOR porque mejora sin romper
@@ -96,19 +81,24 @@ image: pdf-extractext:${IMAGE_TAG:-latest}
   pasa el alta de documentos por la misma compuerta que `/extract`, hace mas
   liviano el healthcheck y actualiza dependencias con vulnerabilidades
   conocidas. MINOR: endpoint y configuraciones nuevas, sin romper nada.
+- La `2.0.0` retira el CRUD `/api/v1/documents`, MongoDB y
+  `DOCUMENTS_API_ENABLED`: el servicio solo expone `POST /extract`, que no
+  cambia. **MAJOR**: quitar endpoints publicos rompe a quien los usara. La
+  persistencia queda en document-store
+  ([ADR-0008](decisions/0008-retirar-crud-y-mongodb.md)).
 
-Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`. Cada release tiene ademas su tag de git (`v1.0.0` ... `v1.3.0`): `git checkout vX.Y.Z` reconstruye exactamente esa version.
+Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`. Cada release tiene ademas su tag de git (`v1.0.0`, `v1.3.0`, ...): `git checkout vX.Y.Z` reconstruye exactamente esa version.
 
 ## Flujo principal
 
-1. El cliente sube un PDF con `name` y `file`.
-2. La API lee el archivo en memoria.
-3. Se valida nombre, extension, firma y tamanio.
-4. Se calcula el checksum SHA-256.
-5. Si el checksum ya existe, el documento se rechaza.
-6. Si es valido, se extrae el texto desde memoria usando `pypdfium2`.
-7. Se guarda el documento en MongoDB con sus metadatos y texto extraido.
-8. La API devuelve el documento creado.
+1. El cliente (el orquestador, o k6 y Vegeta en el TP) manda el PDF a
+   `POST /extract`, como body crudo o como campo `file` de un multipart.
+2. La compuerta de admision lo acepta o responde `503` con `Retry-After`.
+3. La API lee el archivo en memoria, con limite de tamanio (`413`).
+4. Se valida que no este vacio y que empiece con `%PDF-` (`400`).
+5. Se extrae el texto desde memoria con `pypdfium2` y se arma el Markdown
+   (`422` si PDFium no puede leerlo).
+6. La API devuelve `{"content", "page_count"}`. No se guarda nada.
 
 ## Ejemplo con curl
 
@@ -116,15 +106,20 @@ En PowerShell hay que escribir `curl.exe`: `curl` a secas es un alias de
 `Invoke-WebRequest`, que no acepta estos parametros y ademas pide confirmacion.
 El caracter de continuacion de linea en PowerShell es la comilla invertida.
 
+Con el PDF como body crudo:
+
 ```powershell
-curl.exe -X POST "http://localhost:8000/api/v1/documents" `
-  -H "accept: application/json" `
-  -F "name=Contrato de prueba" `
-  -F "file=@C:/ruta/al/archivo.pdf;type=application/pdf"
+curl.exe -X POST "http://localhost:8000/extract" `
+  -H "Content-Type: application/pdf" `
+  --data-binary "@C:/ruta/al/archivo.pdf"
 ```
 
-> No hace falta pasar `Content-Type`: `curl` lo arma solo, con el `boundary`
-> que necesita el `multipart/form-data`.
+O como multipart (`curl` arma solo el `Content-Type` con el `boundary`):
+
+```powershell
+curl.exe -X POST "http://localhost:8000/extract" `
+  -F "file=@C:/ruta/al/archivo.pdf;type=application/pdf"
+```
 
 Tambien se puede probar sin la terminal, desde Swagger UI en
 <http://localhost:8000/docs>, con el boton **Try it out**.
@@ -133,15 +128,8 @@ Respuesta esperada:
 
 ```json
 {
-  "name": "Contrato de prueba",
-  "original_filename": "archivo.pdf",
-  "file_size": 12345,
-  "id": 1,
-  "checksum": "sha256...",
-  "extracted_text": "Texto extraido del PDF",
-  "is_processed": true,
-  "created_at": "2026-06-03T20:00:00.000000Z",
-  "updated_at": "2026-06-03T20:00:00.000000Z"
+  "content": "# Titulo\n\nTexto extraido del PDF",
+  "page_count": 16
 }
 ```
 
@@ -172,34 +160,27 @@ Convenciones vigentes:
   Ejemplo: `fix(#30): corregir los errores de tipos de mypy. Closes #30`.
 - **Tests**: nombres que se leen como especificacion (`test_<que_hace_el_sistema>`),
   organizados por capa (ver seccion Tests).
-- **Estado a preparar en un test**: siempre por una interfaz publica, nunca
-  escribiendo documentos crudos en MongoDB.
+- **Estado a preparar en un test**: siempre por una interfaz publica.
 
 ## Comandos utiles
 
 Comandos con `make`, si lo tenes instalado (desde la raiz del proyecto):
 
 ```bash
-make up          # Levantar todo el stack
-make down        # Apagar todo
+make up          # Levantar la API (igual que make api)
+make down        # Apagarla
 make logs        # Ver logs de la API
-make ps          # Ver estado de los contenedores
-make api         # Levantar solo la API
-make db          # Levantar solo MongoDB
+make ps          # Ver estado del contenedor
+make tp-up       # Stack del TP: Traefik + 5 replicas
+make tp-down     # Apagar el stack del TP
 ```
 
-Comandos manuales (por servicio):
+Comandos manuales:
 
 Reconstruir la API:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.yml up -d --build --force-recreate
-```
-
-Ver logs de MongoDB:
-
-```bash
-docker logs -f docker_mongo_1
 ```
 
 Ver logs de la API:
@@ -208,20 +189,8 @@ Ver logs de la API:
 docker logs -f docker_api_1
 ```
 
-Apagar solo la API:
+Apagar la API:
 
 ```bash
 docker compose --env-file .env -f docker/docker-compose.yml down
-```
-
-Apagar solo MongoDB:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.db.yml down
-```
-
-Borrar tambien el volumen de MongoDB:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.db.yml down -v
 ```

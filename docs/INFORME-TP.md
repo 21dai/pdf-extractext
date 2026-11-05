@@ -1,5 +1,7 @@
 # Informe del TP: Test de Carga, Estres y Optimizacion de Microservicio
 
+> **Registro historico (issue #31).** Desde la version 2.0.0 pdf-extractext no tiene CRUD ni MongoDB: solo extrae, y la persistencia vive en document-store ([ADR 0008](decisions/0008-retirar-crud-y-mongodb.md)). Las mediciones y el analisis de `POST /extract` siguen valiendo; donde se menciona el CRUD o MongoDB, describe el servicio como era al medir.
+
 Microservicio `pdf-extractext`, version 1.3.3 (2026-10-07). Las secciones 1 a
 7 son el informe; el anexo es la bitacora con cada medicion en el orden en que
 se hizo. Las decisiones estan en [decisions/](decisions/README.md), el plan de

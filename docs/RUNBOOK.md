@@ -99,6 +99,12 @@ $env:IMAGE_TAG = "1.2.0"; docker compose up -d   # imagen anterior, si existe
 git checkout v1.2.0; docker compose up --build -d  # o reconstruirla
 ```
 
+Ojo al volver de la 2.x a una 1.x: las 1.x todavia tenian el CRUD
+`/api/v1/documents` sobre MongoDB y arrancaban con `DOCUMENTS_API_ENABLED=true`
+por defecto. En el stack del TP (`docker-compose.yml` de la raiz) no hay
+MongoDB, asi que hay que pasarles `DOCUMENTS_API_ENABLED=false`. Desde la 2.0.0
+el servicio no tiene base de datos (ADR-0008).
+
 ### Docker Desktop no arranca ("sailor-ingest.sock" o "engine.sock")
 
 Quedaron sockets de un apagado sucio. Cerrar Docker Desktop del todo,

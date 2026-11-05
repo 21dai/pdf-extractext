@@ -1,8 +1,15 @@
 # API de Extraccion de PDF
 
-API construida con FastAPI para registrar documentos PDF, validar su formato y tamanio, extraer texto en memoria, calcular checksum y persistir la informacion en MongoDB.
+Microservicio sin estado construido con FastAPI: recibe un PDF, valida su formato y tamanio, y devuelve su texto en Markdown y su cantidad de paginas. **No guarda nada**: no tiene base de datos ni CRUD.
 
-El proyecto corresponde a la Etapa 1 de Desarrollo de Software. La aplicacion trabaja con arquitectura de 3 capas y usa Docker para separar la base de datos de la aplicacion.
+En el sistema completo lo llama el orquestador (`orchestrator-service`), que despues guarda el documento en **document-store** (su propio servicio con MongoDB):
+
+```text
+Cliente -> Traefik -> orchestrator -> POST /extract (este servicio: PDF -> texto)
+                                   -> POST /api/v1/documents (document-store -> MongoDB)
+```
+
+Hasta la 1.4.0 este servicio tambien guardaba los documentos en MongoDB y exponia un CRUD en `/api/v1/documents`. Desde la **2.0.0** eso se retiro: la persistencia vive solo en document-store ([ADR-0008](docs/decisions/0008-retirar-crud-y-mongodb.md)).
 
 ## Integrantes
 
@@ -62,32 +69,28 @@ antes y despues, proceso de investigacion) esta en
 
 - `POST /extract` sin estado, el endpoint del TP: recibe un PDF (body crudo o
   multipart) y devuelve su contenido en Markdown y su cantidad de paginas.
-- Upload real de archivos PDF con `multipart/form-data`.
-- Validacion de nombre, extension `.pdf`, firma `%PDF-` y tamanio maximo.
+- Upload del PDF como body crudo (`application/pdf`) o `multipart/form-data`.
+- Validacion de firma `%PDF-` y tamanio maximo.
 - Extraccion de texto con `pypdfium2` (PDFium, el motor de PDF de Chrome) en memoria, sin guardar temporalmente el PDF en disco.
-- Calculo de checksum SHA-256.
 - Metricas propias de cada replica en `GET /metrics` (cola, rechazos por motivo,
   tiempo de extraccion) y dashboard de Grafana (`--profile monitoreo`).
-- Rechazo de documentos duplicados por checksum (`409`, tambien si dos uploads
-  iguales llegan a la vez y los frena el indice unico de MongoDB).
-- Persistencia en MongoDB.
-- CRUD de documentos persistidos.
-- Respuestas de error compatibles con Problem Details para casos especificos.
-- Tests automatizados con `pytest` y `mongomock`.
+- Respuestas de error compatibles con Problem Details (RFC 9457).
+- Tests automatizados con `pytest`, sin servicios externos.
 - Imagen Docker propia para la API.
-- Docker Compose separado para base de datos y aplicacion.
 
 ## Arquitectura
 
 Tres capas con influencia de arquitectura hexagonal:
 
 ```text
-Router (app/api) -> Service (app/services) -> Repository (app/repositories) -> MongoDB
+Router (app/api) -> Service (app/services) -> Nucleo (app/core: validacion, PDFium, Markdown)
 ```
+
+No hay capa de repositorio: el servicio no persiste nada.
 
 El detalle de capas, nucleo, flujos y decisiones esta en
 [ARCHITECTURE.md](ARCHITECTURE.md) y en los ADRs de
-[docs/decisions](docs/decisions/README.md). Persistencia, estructura de Docker,
+[docs/decisions](docs/decisions/README.md). Estructura de Docker,
 versionado, ejemplos con curl y comandos utiles: [docs/DESARROLLO.md](docs/DESARROLLO.md).
 
 ## Requisitos
@@ -114,8 +117,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=1.4.0
-IMAGE_TAG=1.4.0
+APP_VERSION=2.0.0
+IMAGE_TAG=2.0.0
 DEBUG=False
 # Nivel de los logs JSON en stdout: DEBUG, INFO, WARNING, ERROR.
 LOG_LEVEL=INFO
@@ -128,12 +131,7 @@ WEB_CONCURRENCY=1
 # Segundos que uvicorn mantiene una conexion inactiva: mas que Traefik (90 s).
 HTTP_KEEP_ALIVE_SECONDS=120
 
-DATABASE_URL=mongodb://admin:9009@mongo:27017/?authSource=admin
-DATABASE_NAME=pdf_extract
-DATABASE_TIMEOUT_MS=3000
 MAX_PDF_SIZE_BYTES=10485760
-# false: solo POST /extract, sin MongoDB ni CRUD (las replicas del TP).
-DOCUMENTS_API_ENABLED=true
 # Backpressure de POST /extract: tiempo util de un request (espera + extraccion);
 # si no llega a terminar a tiempo, 503 sin procesarlo. Menor que el timeout de los clientes.
 EXTRACT_MAX_WAIT_SECONDS=25
@@ -147,14 +145,15 @@ EXTRACT_PRIORITY_AGE_SECONDS=7.5
 # Origenes permitidos por CORS, separados por coma. "*" = cualquiera, sin credenciales.
 CORS_ALLOW_ORIGINS=*
 
-API_V1_PREFIX=/api/v1
 API_DOCS_URL=/docs
 API_REDOC_URL=/redoc
 API_OPENAPI_URL=/openapi.json
-
-ROOT_USERNAME=admin
-ROOT_PASSWORD=9009
 ```
+
+No hay variables de base de datos. Si el entorno todavia trae `DATABASE_URL`,
+`DATABASE_NAME`, `DATABASE_TIMEOUT_MS` o `DOCUMENTS_API_ENABLED` (por ejemplo,
+el compose de `infrastructure` hasta que se actualice), se ignoran: el servicio
+arranca igual.
 
 ## Ejecucion con Docker
 
@@ -162,96 +161,44 @@ Hay tres formas de levantarlo, segun para que:
 
 | Para que | Compose | Comando |
 |---|---|---|
-| Desarrollar la API completa (CRUD + MongoDB) | `docker/docker-compose.yml` y `docker/docker-compose.db.yml` | `make up` o los comandos de abajo |
-| El TP: Traefik + 5 replicas de `/extract`, sin MongoDB | `docker-compose.yml` de la raiz | `docker compose up --build` o `make tp-up` |
-| Todo el sistema (orquestador + este servicio + MongoDB) | repo `infrastructure` | ver su README |
+| Desarrollar la API: una instancia en `:8000` | `docker/docker-compose.yml` | `make up` o los comandos de abajo |
+| El TP: Traefik + 5 replicas de `/extract` | `docker-compose.yml` de la raiz | `docker compose up --build` o `make tp-up` |
+| Todo el sistema (orquestador + este servicio + document-store + MongoDB) | repo `infrastructure` | ver su README |
 
-Los tres usan los mismos puertos: no levantar dos a la vez.
+Los tres usan los mismos puertos: no levantar dos a la vez. Ninguno de los
+compose de este repo levanta MongoDB: el servicio no lo usa.
 
 ### Atajo con `make` (opcional)
 
 Si tenes `make` instalado, desde la raiz del proyecto:
 
 ```bash
-make up
-```
-
-Esto levanta automaticamente: MongoDB → API
-
-Otros comandos disponibles:
-
-```bash
-make down   # Apagar todo
+make up     # Levantar la API (igual que make api)
+make down   # Apagarla
 make logs   # Ver logs de la API
-make ps     # Ver estado de los contenedores
-make api    # Levantar solo la API
-make db     # Levantar solo MongoDB
+make ps     # Ver estado del contenedor
 ```
 
 ### Con docker compose (recomendado, funciona en cualquier sistema)
 
 No necesita `make`. Desde la raiz del proyecto:
 
-Levantar MongoDB:
-
 ```bash
-docker compose --env-file .env -f docker/docker-compose.db.yml up -d
-```
-
-Construir y levantar la API:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.yml up -d --build
-```
-
-Verificar contenedores:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.db.yml ps
-docker compose --env-file .env -f docker/docker-compose.yml ps
-```
-
-Ver logs de la API:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.yml logs -f api
+docker compose --env-file .env -f docker/docker-compose.yml up -d --build   # construir y levantar
+docker compose --env-file .env -f docker/docker-compose.yml ps              # estado
+docker compose --env-file .env -f docker/docker-compose.yml logs -f api     # logs
+docker compose --env-file .env -f docker/docker-compose.yml down            # apagar
 ```
 
 > Nota: el nombre del contenedor puede variar (`docker-api-1`, `docker_api_1`, etc.) según la versión/configuración de Docker Compose.
 
-Apagar todo:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.yml down
-docker compose --env-file .env -f docker/docker-compose.db.yml down
-```
-
 ## Ejecucion local
 
-Tambien se puede correr la API localmente, usando MongoDB en Docker.
-
-Instalar dependencias:
+No necesita Docker ni ninguna base de datos:
 
 ```powershell
 uv sync --extra dev
-```
-
-Levantar MongoDB:
-
-```bash
-docker compose --env-file .env -f docker/docker-compose.db.yml up -d
-```
-
-Correr la API:
-
-```powershell
 uv run python main.py
-```
-
-Alternativa si el entorno ya tiene dependencias instaladas:
-
-```powershell
-python main.py
 ```
 
 ## URLs utiles
@@ -263,32 +210,22 @@ python main.py
 - Readiness: `http://localhost:8000/ready`
 - Metricas (Prometheus): `http://localhost:8000/metrics`
 
-`/health` (liveness) solo dice que el proceso responde y no consulta MongoDB:
-es el que usa el healthcheck de Docker, para que una caida de la base no saque
-de servicio a las replicas de `POST /extract`, que no la usan. `/ready`
-(readiness) tambien verifica MongoDB y responde `503` si no esta disponible:
+`/health` (liveness) y `/ready` (readiness) responden `{"status": "ok"}` si el
+proceso atiende: el servicio no depende de ninguna base de datos ni de otros
+servicios, asi que no hay nada mas que chequear. El healthcheck de Docker usa
+`/health`.
 
-```json
-{
-  "status": "ok",
-  "database": "mongodb",
-  "database_name": "pdf_extract"
-}
-```
-
-## Endpoints principales
+## Endpoints
 
 - `POST /extract` (sin estado, ver la seccion siguiente)
-- `POST /api/v1/documents` (multipart con `name` y `file`; el PDF se lee en
-  memoria con limite: `400` invalido, `409` duplicado, `413` demasiado grande,
-  `422` ilegible o falta un campo)
-- `GET /api/v1/documents`
-- `GET /api/v1/documents/{document_id}`
-- `PUT /api/v1/documents/{document_id}`
-- `DELETE /api/v1/documents/{document_id}`
-- `POST /api/v1/documents/{document_id}/extract`
 - `GET /health` (liveness)
 - `GET /ready` (readiness)
+- `GET /metrics` (Prometheus)
+- `GET /` (version y link a la documentacion)
+
+`/api/v1/documents` ya no existe (`404`) desde la 2.0.0. Para guardar un PDF y
+consultarlo despues se usa `POST /api/v1/documents` del orquestador, que
+extrae el texto con este servicio y lo guarda en document-store.
 
 ## POST /extract (TP de carga y estres)
 
@@ -301,7 +238,8 @@ responde `200`:
 ```
 
 - No guarda nada: no calcula checksum ni rechaza duplicados; el mismo PDF se
-  puede mandar las veces que haga falta.
+  puede mandar las veces que haga falta. El checksum lo calcula el orquestador
+  y los duplicados los rechaza document-store.
 - `content` es Markdown: los titulos salen de la altura de las letras
   (`app/core/markdown.py`) y las vinetas como items de lista.
 - Errores en formato RFC 9457: `400` si no es un PDF o esta vacio, `413` si
@@ -319,7 +257,7 @@ curl.exe -X POST http://127.0.0.1:8000/extract -H "Content-Type: application/pdf
 ### Stack del TP: 5 replicas detras de Traefik
 
 El `docker-compose.yml` de la raiz levanta Traefik y 5 replicas de
-`/extract` (1 CPU y 1 GB cada una, sin MongoDB), con un solo comando:
+`/extract` (1 CPU y 1 GB cada una), con un solo comando:
 
 ```powershell
 docker compose up --build
@@ -345,21 +283,20 @@ python -m pytest -q
 
 Los tests cubren:
 
-- Healthcheck.
-- Alta de documentos.
-- Lectura/listado.
-- Actualizacion.
-- Eliminacion.
-- Extraccion de texto.
-- Validaciones de nombre, PDF, tamanio, checksum y paginacion.
-- Errores controlados.
+- `POST /extract`: body crudo y multipart, Markdown, limites de tamanio, PDFs
+  ilegibles y lectura en memoria sin pasar por disco.
+- Contrapresion: cola, prioridad por tamanio y rechazo con `Retry-After`.
+- Health, readiness, metricas, logs, CORS y configuracion.
+- Que el servicio arranque y extraiga aunque reciba variables de base de datos,
+  que `/api/v1/documents` responda `404` y que no se declare ningun driver de
+  base de datos (`tests/test_sin_base_de_datos.py`).
 
 Los tests estan organizados por capa:
 
-- `tests/test_validators.py`: reglas de dominio puras, sin I/O.
-- `tests/service/`: la capa de negocio (`DocumentService`) probada por su propia interfaz, sin HTTP.
-- `tests/api/`: el flujo completo por HTTP con `TestClient` y `mongomock`.
-- `tests/load/`: pruebas de carga con k6 (ver la seccion siguiente). No corren con `pytest`.
+- `tests/test_validators.py`, `tests/test_pdf_extraction.py`, `tests/test_markdown.py`: el nucleo, sin I/O.
+- `tests/service/`: `ExtractionService` y la compuerta de admision por su propia interfaz, sin HTTP.
+- `tests/api/`: el flujo completo por HTTP con `TestClient`.
+- `tests/stress/`: pruebas de carga del TP con k6 y Vegeta (ver su README). No corren con `pytest`.
 
 ## Calidad de codigo
 
@@ -387,12 +324,12 @@ el escaneo de secretos y la auditoria de dependencias (`pip-audit`). Detalle en
 - `docs/RUNBOOK.md`: que hacer ante saturacion, caidas, deploys y rollback.
 - `docs/MEJORAS-RENDIMIENTO.md`: que mas se puede hacer para superar al profesor, con tiempos estimados.
 - `docs/PLAN-MEJORAS.md`: plan por fases para mejorar el proyecto completo y el TP.
-- `docs/DESARROLLO.md`: Docker y versionado, persistencia, ejemplos con curl, calidad de codigo y comandos utiles.
-- `docs/PRUEBAS-CARGA-CRUD.md`: pruebas de carga de los endpoints de documentos.
+- `docs/DESARROLLO.md`: Docker y versionado, ejemplos con curl, calidad de codigo y comandos utiles.
+- `docs/PRUEBAS-CARGA-CRUD.md`: registro historico de las pruebas de carga del CRUD retirado en la 2.0.0.
 - `tests/stress/README.md`: como correr las pruebas de carga del TP.
 
 ## Limitacion conocida
 
 La extraccion actual usa `pypdfium2`, por lo que obtiene texto digital embebido en el PDF.
 
-Si el PDF es escaneado o contiene solo imagenes, `extracted_text` puede quedar vacio. Eso no significa que la API falle: significa que no se esta aplicando OCR.
+Si el PDF es escaneado o contiene solo imagenes, `content` puede quedar vacio. Eso no significa que la API falle: significa que no se esta aplicando OCR.

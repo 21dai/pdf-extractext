@@ -1,5 +1,7 @@
 # Pruebas de carga del CRUD
 
+> **Registro historico (issue #31).** Desde la version 2.0.0 pdf-extractext no tiene CRUD ni MongoDB: solo extrae, y la persistencia vive en document-store ([ADR 0008](decisions/0008-retirar-crud-y-mongodb.md)). Los endpoints medidos aca y sus scripts (`tests/load/documents.js`, `tests/load/vegeta/`) se retiraron; los scripts siguen en el tag de git `v1.4.0`. Los resultados quedan como se midieron.
+
 Pruebas de velocidad de los endpoints de documentos (`/api/v1/documents`).
 Las del TP (`POST /extract`, spike y carga fija contra el profesor) estan en
 [tests/stress](../tests/stress/README.md).

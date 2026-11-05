@@ -1,5 +1,7 @@
 # Plan del TP: Test de Carga, Estres y Optimizacion de Microservicio
 
+> **Registro historico (issue #31).** Desde la version 2.0.0 pdf-extractext no tiene CRUD ni MongoDB: solo extrae, y la persistencia vive en document-store ([ADR 0008](decisions/0008-retirar-crud-y-mongodb.md)). Las tareas que mencionan el CRUD, MongoDB o `DOCUMENTS_API_ENABLED` describen el servicio como era entonces.
+
 Hoja de ruta para la entrega del TP de Desarrollo de Software (UTN FRSR) y
 para dejar `pdf-extractext` alineado con la teoria de la catedra: los 8
 principios de *production-readiness* de Susan Fowler, 12-Factor App, Codigo

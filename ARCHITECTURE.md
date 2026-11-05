@@ -2,67 +2,60 @@
 
 ## Vision general
 
-El proyecto sigue una arquitectura de 3 capas con influencia parcial de Hexagonal:
+pdf-extractext hace una sola cosa: **PDF -> texto extraido**. Recibe un PDF,
+lo valida y devuelve su contenido en Markdown y su cantidad de paginas, sin
+guardar nada.
 
 ```text
-CRUD:            Router -> DocumentService   -> Repository -> MongoDB
-POST /extract:   Router -> ExtractionService -> app/core (PDFium + Markdown)
+POST /extract:   Router -> ExtractionService -> app/core (validacion, PDFium + Markdown)
 ```
 
-El CRUD registra documentos y los guarda en MongoDB. `POST /extract` es el
-endpoint del TP de carga: valida y extrae sin repositorio, sin checksum y sin
-escribir nada, asi sus replicas no comparten estado.
+En el sistema completo es uno de los servicios hoja del orquestador:
+
+```text
+Cliente -> Traefik -> orchestrator -> POST /extract (pdf-extractext, sin estado)
+                                   -> POST /api/v1/documents (document-store -> MongoDB)
+```
+
+El orquestador calcula el checksum y le pasa el texto a document-store, que es
+el unico que persiste documentos y rechaza duplicados. Hasta la 1.4.0 este
+servicio tambien tenia un CRUD sobre MongoDB (`/api/v1/documents`); se retiro
+en la 2.0.0 ([ADR-0008](docs/decisions/0008-retirar-crud-y-mongodb.md)).
+
+Como no tiene estado, sus replicas no comparten nada (12-Factor VI) y se
+escalan agregando replicas detras de Traefik.
 
 > Clasificacion honesta: **no es Clean Architecture ni Onion Architecture**.
-> Es una arquitectura en 3 capas clasica, con una influencia parcial del estilo
-> Hexagonal (Ports & Adapters) reflejada en la existencia de `DocumentRepository`
-> como unico punto de acceso a la persistencia. Sin embargo, no existe una
-> separacion estricta entre dominio e infraestructura (ver la seccion
-> "Decision de arquitectura: acoplamiento Modelo/Persistencia").
+> Es una arquitectura en capas (router, service, nucleo) sin capa de acceso a
+> datos, porque no hay datos que persistir.
 
 ## 1. Capa de presentacion
 
-Ubicacion: `app/api/routers/`
+Ubicacion: `app/api/`
 
 Responsabilidades:
 
 - recibir requests HTTP
-- validar parametros de entrada
-- transformar errores de negocio en respuestas HTTP
+- leer el PDF en memoria
+- transformar errores de dominio en respuestas HTTP
 - devolver respuestas JSON
 
 Archivos principales:
 
-- `app/api/routers/document.py`: CRUD de documentos
 - `app/api/routers/extract.py`: `POST /extract`, PDF crudo o multipart
-- `app/api/uploads.py`: lectura de uploads para los dos routers. El PDF queda
-  en memoria (nunca en un archivo temporal) y un body demasiado grande se
-  rechaza con 413 por `Content-Length` o apenas se pasa del limite
-- `app/api/dependencies.py`: la compuerta de admision del proceso, que
-  comparten `/extract` y el alta de documentos (los dos usan PDFium)
+- `app/api/uploads.py`: lectura del upload. El PDF queda en memoria (nunca en
+  un archivo temporal) y un body demasiado grande se rechaza con 413 por
+  `Content-Length` o apenas se pasa del limite
+- `app/api/dependencies.py`: la compuerta de admision del proceso
 - `app/utils/problem_details.py`: traduce cada error de dominio a su respuesta
-  RFC 9457 (400, 409, 413, 422, 503); los routers no atrapan errores
-  genericos
+  RFC 9457 (400, 413, 422, 503); los routers no atrapan errores genericos
 
 ## 2. Capa de logica de negocio
 
 Ubicacion: `app/services/`
 
-Responsabilidades:
-
-- validar el nombre del documento
-- validar que el archivo sea PDF
-- controlar tamano maximo
-- calcular checksum
-- evitar duplicados
-- pedir la extraccion al nucleo (`app/core/pdf_extraction.py`)
-- definir el flujo de actualizacion y borrado
-
-Archivos principales:
-
-- `app/services/document_service.py`: alta, consulta, actualizacion y borrado
-- `app/services/extraction_service.py`: valida y extrae para `POST /extract`, sin
-  persistir; registra cada extraccion en el log (bytes, paginas, ms)
+- `app/services/extraction_service.py`: valida y extrae para `POST /extract`,
+  sin persistir; registra cada extraccion en el log (bytes, paginas, ms)
 - `app/services/admission.py`: la compuerta de admision de cada proceso (cola
   acotada, una extraccion por vez, el PDF mas liviano primero con limite de
   espera, tiempo util con margen). Avisa lo que pasa a un observador
@@ -70,18 +63,17 @@ Archivos principales:
 - `app/utils/metrics.py`: el observador que publica las metricas de la
   compuerta en `GET /metrics` (formato Prometheus)
 
-Los dos services reciben su motor por constructor: `ExtractionService` un
-`PdfExtractor` (Markdown) y `DocumentService` una funcion de texto plano. Se
-pueden probar con motores falsos y cambiar de motor sin tocar los routers.
+`ExtractionService` recibe su motor (`PdfExtractor`) por constructor: se puede
+probar con motores falsos y cambiar de motor sin tocar el router.
 
 ## Nucleo
 
 Ubicacion: `app/core/`
 
-Reglas puras, sin FastAPI ni MongoDB, testeables sin levantar nada:
+Reglas puras, sin FastAPI, testeables sin levantar nada:
 
-- `validators.py`: nombre, extension, firma `%PDF-` y tamano
-- `exceptions.py`: errores de dominio; `/extract` los traduce a 400, 413 y 422
+- `validators.py`: firma `%PDF-` y tamano
+- `exceptions.py`: errores de dominio; se traducen a 400, 413, 422 y 503
 - `pdf_extraction.py`: texto y cantidad de paginas con `pypdfium2` (PDFium, el
   motor de Chrome). PDFium no es thread-safe: se serializa con un lock por
   proceso, y el paralelismo viene de los procesos de uvicorn y las replicas.
@@ -91,95 +83,15 @@ Reglas puras, sin FastAPI ni MongoDB, testeables sin levantar nada:
 - `markdown.py`: convierte las lineas de cada pagina a Markdown; los titulos
   salen de la altura de las letras comparada con la del cuerpo
 
-## 3. Capa de acceso a datos
-
-Ubicacion: `app/repositories/`
-
-Responsabilidades:
-
-- crear documentos en MongoDB
-- buscar por `id`, `name` y `checksum`
-- actualizar documentos
-- eliminar documentos
-- manejar el contador secuencial de IDs
-
-Archivo principal:
-
-- `app/repositories/document_repository.py`
-
-## Decision de arquitectura: acoplamiento Modelo/Persistencia
-
-### Estado actual
-
-La clase `Document` (`app/models/document.py`) actua simultaneamente como:
-
-- **entidad de dominio**: representa el concepto de negocio "documento PDF procesado" (nombre, checksum, texto extraido, tamano, etc.);
-- **documento de base de datos**: su estructura es la que se persiste directamente en MongoDB a traves del repository.
-
-Es decir, no existe una separacion entre un "modelo de dominio puro" y un "modelo de persistencia" propios de Clean Architecture o Onion Architecture.
-
-### Esto es una decision consciente, no un descuido tecnico
-
-Este acoplamiento es un **limite aceptado de forma deliberada** para el alcance actual del proyecto. Las razones son:
-
-- **Simplicidad (KISS)**: para un CRUD con un solo agregado (`Document`), mantener dos modelos y un mapper entre ellos agregaria complejidad sin beneficio real.
-- **Alcance acotado**: el dominio no tiene logica rica ni invariantes complejas que exijan aislar el modelo de la forma de persistencia.
-- **Costo/beneficio**: el costo de desacoplar hoy supera el riesgo de migracion futura, dado que el seam ya esta previsto (ver abajo).
-
-### Seam (punto de desacoplamiento futuro)
-
-Aunque el modelo esta acoplado a la persistencia, **la frontera de desacoplamiento ya existe**: es `DocumentRepository` (`app/repositories/document_repository.py`).
-
-Si en el futuro se necesita separar dominio de persistencia, el cambio es localizado:
-
-1. Crear un modelo de dominio puro y un modelo de persistencia (o schema) independientes.
-2. Modificar unicamente los metodos `_serialize` / `_deserialize` del repository para que actuen como mappers entre ambos modelos.
-
-El resto de la aplicacion (routers, services) no deberia requerir cambios, porque ya consume al repository como unica via de acceso a datos. Este es el punto donde la influencia Hexagonal del diseno paga su deuda tecnica.
-
-## Persistencia
-
-La aplicacion usa MongoDB.
-
-Colecciones:
-
-- `documents`
-- `counters`
-
-Indices principales:
-
-- `id` unico
-- `checksum` unico
-- `name` no unico
-
-## Flujo del alta
-
-1. El cliente envia `name` y `file` (multipart).
-2. El router pide lugar en la compuerta de admision (503 si la cola esta
-   llena) y lee el archivo en memoria, con limite de tamano (413).
-3. El service valida extension, firma y tamano.
-4. El service calcula el checksum.
-5. Si el checksum ya existe, rechaza el documento con 409 (tambien si dos
-   uploads iguales llegan a la vez y los frena el indice unico de MongoDB).
-6. Si el PDF es valido, extrae el texto en memoria.
-7. El repository guarda el documento en MongoDB.
-8. La API devuelve el documento ya procesado.
-
 ## Flujo de extraccion
 
-Para documentos nuevos, la extraccion ya se realiza en el alta.
-
-`POST /api/v1/documents/{id}/extract`:
-
-- devuelve el texto ya almacenado si el documento ya fue procesado
-- conserva compatibilidad con documentos viejos que pudieran requerir reprocesamiento
-
-`POST /extract` (sin estado) es otro flujo: recibe el PDF, lo valida, devuelve
-`{"content": <Markdown>, "page_count": N}` y no guarda nada.
+`POST /extract` recibe el PDF, lo valida, devuelve
+`{"content": <Markdown>, "page_count": N}` y no guarda nada. El mismo PDF se
+puede mandar las veces que haga falta.
 
 ```mermaid
 flowchart LR
-    C[Cliente: k6 / Vegeta] -->|POST /extract| T[Traefik<br/>round robin + reintentos]
+    C[Cliente: orquestador, k6 / Vegeta] -->|POST /extract| T[Traefik<br/>round robin + reintentos]
     T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
     subgraph Replica [dentro de cada replica]
         G[AdmissionGate<br/>cola de 60, tiempo util 25 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
@@ -195,30 +107,29 @@ flowchart LR
 3. Si el cliente ya se fue o el request espero mas que su tiempo util, no se
    procesa. Si no, `ExtractionService` valida y el motor extrae.
 
-## Modos de despliegue
+## Despliegue
 
-- **Servicio completo** (`DOCUMENTS_API_ENABLED=true`, el default): CRUD +
-  `POST /extract`, necesita MongoDB. Es el que usa el repo `infrastructure`.
-- **Solo extractor** (`DOCUMENTS_API_ENABLED=false`): solo `POST /extract`, no
-  crea indices ni se conecta a MongoDB. Es el de las 5 replicas del TP
-  (`docker-compose.yml` de la raiz).
+Hay un solo modo: el servicio expone `POST /extract` y no se conecta a ninguna
+base de datos. Es el mismo en las 5 replicas del TP (`docker-compose.yml` de la
+raiz) y en el stack completo del repo `infrastructure`. Si el entorno todavia
+le pasa `DATABASE_URL` u otras variables de base, `Settings` las ignora
+(`extra="ignore"`) y arranca igual.
 
 ## Operacion
 
-- `GET /health` (liveness): el proceso responde; no consulta dependencias. Lo
-  usan los healthchecks de Docker, asi una caida de MongoDB no saca de servicio
-  a las replicas de `POST /extract`.
-- `GET /ready` (readiness): ademas verifica MongoDB (503 si no responde).
+- `GET /health` (liveness) y `GET /ready` (readiness): responden si el proceso
+  atiende. No hay dependencias que chequear. Los healthchecks de Docker usan
+  `/health`.
 - Logs: una linea JSON por evento en stdout, incluidos los de uvicorn
   (`app/utils/structured_logging.py`, nivel por `LOG_LEVEL`).
-- Administracion: `python -m app.admin.clear_documents` borra documentos con el
-  mismo codigo y la misma configuracion que la API.
 - Apagado ordenado: ante SIGTERM uvicorn deja de aceptar conexiones y termina
   lo que tiene en cola; Docker espera 35 s (`stop_grace_period`) antes de
   matarlo. Mientras tanto Traefik reintenta en otra replica.
 - Caidas: `restart: unless-stopped` levanta la replica sola (~15 s hasta
   healthy) y Traefik reintenta en otra los requests que no llegaron a
-  procesarse. Traefik es el punto unico de falla del stack del TP.
+  procesarse. Es seguro porque `/extract` no tiene efectos: procesar dos veces
+  el mismo PDF no cambia nada. Traefik es el punto unico de falla del stack
+  del TP.
 - Metricas: cada replica expone `GET /metrics` (cola, rechazos por motivo y
   tiempo de extraccion); el perfil `monitoreo` del compose las junta con las de
   Traefik en Prometheus y Grafana. Procedimientos en `docs/RUNBOOK.md`.
@@ -229,32 +140,17 @@ flowchart LR
 
 ## Principios aplicados
 
-- KISS: el flujo principal esta concentrado en un solo service
-- DRY: el checksum y la validacion se centralizan
-- SOLID: cada capa tiene una responsabilidad clara
+- KISS: una responsabilidad (extraer), un endpoint de negocio
+- SOLID: cada capa tiene una responsabilidad clara; el motor se inyecta
 - 12 Factor: configuracion por variables de entorno (III), procesos sin estado
-  en `/extract` (VI), concurrencia por procesos y replicas (VIII), logs a stdout
-  (XI) y procesos de administracion con el mismo codigo (XII)
+  (VI), concurrencia por procesos y replicas (VIII) y logs a stdout (XI)
 
 ## Dependencias relevantes
 
 - FastAPI
 - Pydantic
-- PyMongo
 - pypdfium2
+- prometheus-client
 - pytest
-- mongomock
 
-## Punto importante para clase
-
-El proyecto ya no usa SQLite ni SQLAlchemy. Toda la persistencia actual se hace en MongoDB, que era uno de los requisitos del enunciado.
-
-## Nota sobre `file_path`
-
-El modelo interno todavia conserva un campo `file_path` por compatibilidad tecnica, pero en los documentos nuevos no representa una ruta real subida por el usuario.
-
-Para los nuevos uploads se guarda solo una referencia logica interna tipo `memory://...`, ya que el procesamiento del PDF se realiza en memoria.
-
-Se reviso si se puede quitar (2026-10-07): el orquestador no lo usa, pero
-esta en la respuesta de la API, asi que quitarlo es un cambio incompatible
-(version 2.0). Queda para decidirlo con el equipo.
+Ninguna de base de datos: lo verifica `tests/test_sin_base_de_datos.py`.

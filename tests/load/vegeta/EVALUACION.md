@@ -1,5 +1,7 @@
 # Evaluacion de carga con Vegeta
 
+> **Registro historico (issue #31).** Desde la version 2.0.0 pdf-extractext no tiene CRUD ni MongoDB: solo extrae, y la persistencia vive en document-store ([ADR 0008](../../../docs/decisions/0008-retirar-crud-y-mongodb.md)). El CRUD medido y los scripts de esta carpeta se retiraron; siguen en el tag de git `v1.4.0`. Los resultados quedan como se midieron.
+
 Fecha: 2026-09-16. API `pdf-extractext` 1.0.1 corriendo en Docker
 (`docker compose -f docker/docker-compose.yml`), un solo proceso de uvicorn,
 MongoDB en Docker, Vegeta v12.13.0 desde Windows contra `127.0.0.1:8000`.

@@ -1,5 +1,7 @@
 # Revision Contra el Enunciado
 
+> **Registro historico (issue #31).** Desde la version 2.0.0 pdf-extractext no tiene CRUD ni MongoDB: solo extrae, y la persistencia vive en document-store ([ADR 0008](decisions/0008-retirar-crud-y-mongodb.md)). Revisa el servicio contra el enunciado de la Etapa 1, que pedia el CRUD sobre MongoDB. Desde la 2.0.0 la persistencia esta en document-store y este servicio solo extrae.
+
 ## Resumen
 
 Estado general del proyecto frente al enunciado del profesor:

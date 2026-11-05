@@ -2,49 +2,39 @@
 
 ## Objetivo
 
-Mostrar en pocos minutos que la API:
+Mostrar en pocos minutos que el servicio:
 
 - recibe un PDF real
 - valida el archivo
-- evita duplicados
-- extrae texto en memoria
-- persiste en MongoDB
+- extrae texto en memoria y lo devuelve en Markdown
+- no guarda nada: es un extractor sin estado
+
+Guardar el documento y rechazar duplicados ya no es trabajo de este servicio:
+lo hace document-store, coordinado por el orquestador (ver "Demo del sistema
+completo" al final y el [ADR-0008](decisions/0008-retirar-crud-y-mongodb.md)).
 
 ## Preparacion previa
 
 Antes de la clase o la demo:
 
-1. Tener Docker Desktop iniciado.
-2. Tener un PDF con texto seleccionable.
-3. Tener un segundo PDF igual para mostrar duplicados, o volver a usar el mismo.
-4. Opcional: tener un PDF escaneado o con imagenes para explicar la limitacion sin OCR.
+1. Tener Docker Desktop iniciado (solo para la demo del TP o del sistema
+   completo; la API sola corre sin Docker).
+2. Tener un PDF con texto seleccionable (sirven los de `tests/stress/pdfs/`).
+3. Opcional: tener un PDF escaneado o con imagenes para explicar la limitacion sin OCR.
 
 ## Arranque
 
-### 1. Levantar todo con make
+### 1. Levantar la API
 
-```bash
-make up
+```powershell
+uv run python main.py
 ```
 
-O si preferis levantar solo MongoDB y la API manualmente:
+O en Docker, con `make up` (o
+`docker compose --env-file .env -f docker/docker-compose.yml up -d --build`).
+No hace falta levantar ninguna base de datos.
 
-```bash
-docker compose --env-file .env -f docker/docker-compose.db.yml up -d
-docker compose --env-file .env -f docker/docker-compose.db.yml ps
-```
-
-Esperado:
-
-- el servicio `mongodb` aparece como `running` o `healthy`
-
-### 2. Levantar la API
-
-```bash
-python main.py
-```
-
-### 3. Abrir Swagger
+### 2. Abrir Swagger
 
 Abrir en el navegador:
 
@@ -54,107 +44,57 @@ Abrir en el navegador:
 
 ### 1. Verificacion de salud
 
-Endpoint:
+Endpoints:
 
-- `GET /ready`
-
-Que decir:
-
-- "Este endpoint confirma que la API esta corriendo y que MongoDB esta conectado."
-- "`/health` solo dice que el proceso responde: lo usa Docker, y no depende de la base."
-
-Esperado:
-
-```json
-{
-  "status": "ok",
-  "database": "mongodb",
-  "database_name": "pdf_extract"
-}
-```
-
-### 2. Alta de un PDF real
-
-Endpoint:
-
-- `POST /api/v1/documents`
-
-Completar:
-
-- `name`: cualquier nombre
-- `file`: seleccionar un PDF real
+- `GET /health` y `GET /ready`
 
 Que decir:
 
-- "La API recibe el archivo directamente por upload."
-- "Valida que sea un PDF real, calcula checksum y extrae texto en memoria."
+- "Los dos responden `{"status": "ok"}`: el servicio no depende de ninguna base
+  ni de otros servicios, asi que no hay nada mas que chequear."
 
-Esperado:
-
-- codigo `201`
-- `checksum`
-- `original_filename`
-- `extracted_text`
-- `is_processed: true`
-
-### 3. Listado de documentos
+### 2. Extraccion de un PDF real
 
 Endpoint:
 
-- `GET /api/v1/documents`
+- `POST /extract` (en Swagger, el campo `file`)
 
-Que decir:
-
-- "Aca vemos que el documento quedo persistido en MongoDB."
-
-### 4. Rechazo de duplicados
-
-Volver a usar:
-
-- `POST /api/v1/documents`
-
-Subir exactamente el mismo PDF.
-
-Que decir:
-
-- "Aunque cambie el nombre, si el contenido es el mismo el checksum coincide y la API lo rechaza."
-
-Esperado:
-
-- codigo `400`
-- detalle: `Ya existe un documento con el mismo checksum`
-
-### 5. Actualizacion del nombre
-
-Endpoint:
-
-- `PUT /api/v1/documents/{document_id}`
-
-Body:
-
-```json
-{
-  "name": "Nombre actualizado"
-}
+```powershell
+curl.exe -X POST http://localhost:8000/extract -H "Content-Type: application/pdf" --data-binary "@tests/stress/pdfs/2020-Scrum-Guide-Spanish-Latin-South-American.pdf"
 ```
 
 Que decir:
 
-- "La API permite actualizar el nombre, pero no campos internos como checksum o texto extraido."
+- "Valida que sea un PDF real y extrae el texto en memoria: el archivo nunca
+  se escribe a disco."
+- "Los titulos salen de la altura de las letras."
 
-### 6. Eliminacion
+Esperado:
 
-Endpoint:
+- codigo `200`
+- `content` con el Markdown
+- `page_count: 16`
 
-- `DELETE /api/v1/documents/{document_id}`
+### 3. Sin estado
+
+Mandar exactamente el mismo PDF otra vez.
 
 Que decir:
 
-- "El CRUD queda completo: alta, consulta, modificacion y baja."
+- "Responde lo mismo: no guarda nada, no calcula checksum ni rechaza duplicados.
+  Por eso se puede escalar en replicas sin estado compartido."
+
+### 4. Errores claros
+
+Mandar un archivo que no es PDF, por ejemplo un `.txt`.
+
+Esperado:
+
+- codigo `400` con `application/problem+json` (RFC 9457)
 
 ## Caso especial para explicar
 
-Si subis un PDF escaneado o compuesto por imagenes, `extracted_text` puede venir vacio.
+Si subis un PDF escaneado o compuesto por imagenes, `content` puede venir vacio.
 
 Que decir:
 
@@ -166,7 +106,9 @@ Que decir:
 
 Frase corta para cerrar:
 
-> La API ya cumple el flujo principal pedido por el trabajo: recibe PDFs reales, valida formato y tamano, evita duplicados por checksum, extrae texto en memoria y persiste los resultados en una base no relacional.
+> El servicio hace una sola cosa: recibe PDFs reales, valida formato y tamano y
+> devuelve el texto en Markdown, en memoria y sin estado. Guardar los documentos
+> es trabajo de document-store.
 
 ## Demo del TP de carga
 
@@ -181,3 +123,21 @@ curl.exe -X POST http://127.0.0.1/extract -H "Content-Type: application/pdf" --d
 
 3. Correr el spike del profesor y mostrar la tabla por PDF y la comparacion
    con su benchmark (ver [tests/stress](../tests/stress/README.md)).
+
+## Demo del sistema completo
+
+El alta, la consulta y el rechazo de duplicados se muestran con el stack del
+repo `infrastructure` (Traefik + orquestador + este servicio + document-store +
+MongoDB), contra el orquestador:
+
+```powershell
+curl.exe -k -F "file=@documento.pdf" https://orchestrator.proyecto.localhost/api/v1/documents
+```
+
+- La primera vez responde `201` con el documento guardado.
+- La segunda, con el mismo PDF, `409`: document-store ya tiene ese checksum.
+
+Que decir:
+
+- "El orquestador le pide el texto a pdf-extractext y lo guarda en
+  document-store: cada servicio tiene una sola responsabilidad."

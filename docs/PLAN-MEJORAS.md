@@ -1,5 +1,7 @@
 # Plan de mejoras del proyecto y del TP
 
+> **Registro historico (issue #31).** Desde la version 2.0.0 pdf-extractext no tiene CRUD ni MongoDB: solo extrae, y la persistencia vive en document-store ([ADR 0008](decisions/0008-retirar-crud-y-mongodb.md)). Las tareas sobre el CRUD (`/api/v1/documents`) describen el servicio como era entonces; ese codigo ya no existe.
+
 Plan para dejar el servicio `pdf-extractext` mejorado en conjunto (el CRUD
 del proyecto, la arquitectura, el codigo, las herramientas y la
 documentacion) y, sobre esa base, seguir mejorando los numeros del TP. Sigue
