@@ -1,7 +1,7 @@
 [project]
 name = "pdf-extractext"
-version = "1.4.0"
-description = "PDF extraction API with 3-layer architecture"
+version = "2.0.0"
+description = "PDF text extraction API (stateless: it stores nothing)"
 readme = "README.md"
 # Misma version de Python que el orquestador, en local y en la imagen
 # (12-Factor X: paridad entre entornos).
@@ -9,7 +9,6 @@ requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.136.0",
     "uvicorn[standard]>=0.34.0",
-    "pymongo>=4.10.1",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
     "python-multipart>=0.0.20",
@@ -22,7 +21,6 @@ dev = [
     "pytest>=8.4.0",
     "pytest-cov>=6.0.0",
     "httpx2>=1.0.0",
-    "mongomock>=4.3.0",
     "black>=26.3.0",
     "flake8>=7.2.0",
     "mypy>=1.20.1",
