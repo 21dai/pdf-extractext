@@ -1,35 +1,24 @@
-.PHONY: up down logs ps build api db limpiar-carga tp-up tp-down benchmark test calidad help
+.PHONY: up down logs ps api tp-up tp-down benchmark test calidad help
 
-# Paths de los compose files
+# Compose de desarrollo: una instancia de la API, sin base de datos (ADR-0008)
 COMPOSE_API=docker/docker-compose.yml
-COMPOSE_DB=docker/docker-compose.db.yml
 ENV_FILE=.env
 
 # --- Targets principales ---
 
-up: db api
-	@echo "Stack completo levantado"
+up: api
 
 api:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) up -d --build
 
-db:
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_DB) up -d
-
 down:
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) down || true
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_DB) down || true
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) down
 
 logs:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) logs -f api
 
 ps:
 	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) ps
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_DB) ps
-
-# Proceso de administracion (12-Factor XII): borra lo que dejan las pruebas de carga
-limpiar-carga:
-	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_API) exec api python -m app.admin.clear_documents --name-regex "^(carga vu|vegeta)"
 
 # --- Stack del TP (docker-compose.yml de la raiz): Traefik + 5 replicas ---
 
@@ -56,13 +45,11 @@ calidad:
 
 help:
 	@echo "Comandos disponibles:"
-	@echo "  make up     - Levantar todo el stack (db + api)"
-	@echo "  make down   - Apagar todo el stack"
+	@echo "  make up     - Levantar la API de desarrollo (igual que make api)"
+	@echo "  make down   - Apagar la API de desarrollo"
 	@echo "  make logs   - Ver logs de la API"
-	@echo "  make ps     - Ver estado de los contenedores"
-	@echo "  make api    - Levantar solo la API"
-	@echo "  make db     - Levantar solo MongoDB"
-	@echo "  make limpiar-carga - Borrar los documentos de las pruebas de carga"
+	@echo "  make ps     - Ver estado del contenedor"
+	@echo "  make api    - Levantar la API en el puerto local"
 	@echo "  make tp-up    - Levantar el stack del TP (Traefik + 5 replicas)"
 	@echo "  make tp-down  - Apagar el stack del TP"
 	@echo "  make benchmark - Spike y Vegeta contra el profesor (Windows)"

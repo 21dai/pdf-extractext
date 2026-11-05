@@ -2,10 +2,11 @@
 #
 #   docker compose up --build
 #
-# Autocontenido: no necesita MongoDB ni los otros repos del proyecto. Las
-# replicas corren con DOCUMENTS_API_ENABLED=false (solo /extract, sin estado).
-# El stack completo (orquestador + CRUD + MongoDB) esta en el repo
-# infrastructure; usa los mismos puertos, asi que no levantar los dos a la vez.
+# Autocontenido: no necesita los otros repos del proyecto. El servicio solo
+# expone POST /extract y no guarda nada (ADR-0008), asi que las replicas no
+# comparten estado. El stack completo (orquestador + document-store + MongoDB)
+# esta en el repo infrastructure; usa los mismos puertos, asi que no levantar
+# los dos a la vez.
 #
 #   POST http://127.0.0.1/extract                     (Vegeta)
 #   POST https://extract.universidad.localhost/extract  (k6; certificado
@@ -45,7 +46,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: pdf-extractext:${IMAGE_TAG:-1.4.0}
+    image: pdf-extractext:${IMAGE_TAG:-2.0.0}
     restart: unless-stopped
     # Ante SIGTERM, uvicorn deja de aceptar conexiones y termina lo que tiene
     # en cola. Un request admitido espera hasta EXTRACT_MAX_WAIT_SECONDS, asi
@@ -54,7 +55,6 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8000
-      DOCUMENTS_API_ENABLED: "false"
       # Un proceso por replica: con 1 CPU de limite, mas procesos compiten
       # por el mismo nucleo (a medir en la Fase 2 del plan).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
