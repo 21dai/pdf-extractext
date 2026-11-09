@@ -11,6 +11,8 @@ scrape_configs:
 
   # Metricas propias de cada replica (GET /metrics): cola, rechazos por motivo
   # y tiempo de extraccion. El DNS de Docker devuelve una IP por replica.
+  # El port tiene que coincidir con EXTRACT_PORT del compose (8000 por
+  # defecto): Prometheus no expande variables de entorno en este archivo.
   - job_name: extract
     dns_sd_configs:
       - names: ["extract"]

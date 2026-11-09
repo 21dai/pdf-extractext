@@ -125,6 +125,8 @@ LOG_LEVEL=INFO
 
 HOST=0.0.0.0
 PORT=8000
+# Puerto de las replicas del stack del TP (docker-compose.yml de la raiz).
+EXTRACT_PORT=8000
 # Procesos de uvicorn: PDFs que se extraen en paralelo. 1 en desarrollo;
 # en Docker, tantos como nucleos quieras dedicar (la extraccion es CPU).
 WEB_CONCURRENCY=1
@@ -265,7 +267,12 @@ docker compose up --build
 
 Queda en `http://127.0.0.1/extract` y en
 `https://extract.universidad.localhost/extract`; el dashboard de Traefik en
-`http://localhost:8080/dashboard/`. Si una replica se cae o se apaga, Traefik
+`http://localhost:8080/dashboard/`. El puerto de las replicas sale de
+`EXTRACT_PORT` (8000 por defecto): lo usan `PORT`, el healthcheck y la label de
+Traefik, asi que se cambia sin reconstruir la imagen
+(`$env:EXTRACT_PORT=9000; docker compose up -d`). Con el perfil `monitoreo`,
+ajustar tambien el `port` del job `extract` en `monitoring/prometheus.yml`:
+Prometheus no lee variables de entorno. Si una replica se cae o se apaga, Traefik
 reintenta en otra; con `docker compose --profile monitoreo up -d` se agregan
 Prometheus y Grafana (`http://localhost:3000`). Usa los mismos puertos que el stack
 completo del repo `infrastructure`: no levantar los dos a la vez. Las pruebas
