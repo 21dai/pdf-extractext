@@ -192,6 +192,14 @@ docker compose --env-file .env -f docker/docker-compose.yml logs -f api     # lo
 docker compose --env-file .env -f docker/docker-compose.yml down            # apagar
 ```
 
+La imagen se etiqueta con `IMAGE_TAG` del `.env` (`pdf-extractext:2.0.0`,
+factor V). Sin esa variable, o sin `--env-file .env`, el compose falla en vez
+de construir una imagen `latest`:
+
+```text
+required variable IMAGE_TAG is missing a value: definir IMAGE_TAG en .env (ver .env.example)
+```
+
 > Nota: el nombre del contenedor puede variar (`docker-api-1`, `docker_api_1`, etc.) según la versión/configuración de Docker Compose.
 
 ## Ejecucion local
