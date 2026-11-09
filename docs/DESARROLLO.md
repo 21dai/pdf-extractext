@@ -53,7 +53,7 @@ image: pdf-extractext:${IMAGE_TAG:-latest}
   | 1.**0**.0 | MINOR | Funcionalidad nueva sin romper lo existente (ej. un endpoint nuevo). |
   | 1.0.**0** | PATCH | Correccion de bugs, sin agregar funcionalidad ni romper nada. |
 
-- La version actual es `2.0.0`. La `1.0.0` fue la primera release estable; la
+- La version actual es `2.0.1`. La `1.0.0` fue la primera release estable; la
   `1.0.1` sumo el hardening del contenedor (issue #18), sin cambios de comportamiento;
   la `1.1.0` cambia la extraccion a `pypdfium2` (unas 15 veces mas rapida) y agrega
   `WEB_CONCURRENCY` para correr varios procesos. Es MINOR porque mejora sin romper
@@ -86,6 +86,10 @@ image: pdf-extractext:${IMAGE_TAG:-latest}
   cambia. **MAJOR**: quitar endpoints publicos rompe a quien los usara. La
   persistencia queda en document-store
   ([ADR-0008](decisions/0008-retirar-crud-y-mongodb.md)).
+- La `2.0.1` saca el puerto fijo de la imagen y del compose del TP
+  (`EXTRACT_PORT`), exige `IMAGE_TAG` en el compose de desarrollo y publica el
+  dashboard de Traefik, Prometheus y Grafana solo en `127.0.0.1` (issues #34,
+  #35 y #37). PATCH: arreglos, sin cambiar la API.
 
 Cada vez que se cierra una nueva release hay que subir `APP_VERSION` (en `pyproject.toml`, `app/config/settings.py` y `.env`) y reconstruir la imagen con ese mismo `IMAGE_TAG`, de forma que cada version del codigo quede asociada a una imagen Docker distinta e identificable, en vez de pisar siempre la misma imagen `latest`. Cada release tiene ademas su tag de git (`v1.0.0`, `v1.3.0`, ...): `git checkout vX.Y.Z` reconstruye exactamente esa version.
 

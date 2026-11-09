@@ -16,7 +16,7 @@ services:
       - "${PORT:-8000}:${PORT:-8000}"
     environment:
       APP_NAME: ${APP_NAME:-PDF Extract API}
-      APP_VERSION: ${APP_VERSION:-2.0.0}
+      APP_VERSION: ${APP_VERSION:-2.0.1}
       DEBUG: ${DEBUG:-False}
       HOST: 0.0.0.0
       PORT: ${PORT:-8000}

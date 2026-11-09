@@ -1,6 +1,6 @@
 [project]
 name = "pdf-extractext"
-version = "2.0.0"
+version = "2.0.1"
 description = "PDF text extraction API (stateless: it stores nothing)"
 readme = "README.md"
 # Misma version de Python que el orquestador, en local y en la imagen
