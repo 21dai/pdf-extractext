@@ -27,7 +27,8 @@ FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:${PATH}"
+    PATH="/app/.venv/bin:${PATH}" \
+    PORT=8000
 
 WORKDIR /app
 
@@ -38,6 +39,8 @@ COPY --from=builder --chown=appuser:appgroup /app /app
 
 USER appuser
 
-EXPOSE 8000
+# Solo documentacion: el puerto real lo define PORT (main.py lo lee de la
+# configuracion), asi que se cambia sin reconstruir la imagen.
+EXPOSE ${PORT}
 
 CMD ["python", "main.py"]
