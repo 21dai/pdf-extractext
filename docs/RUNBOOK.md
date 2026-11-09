@@ -23,9 +23,15 @@ Docker abierto pueden quedar sockets viejos y Docker no vuelve a arrancar (ver
 | Logs de las replicas (JSON) | `docker compose logs -f extract` |
 | Solo rechazos y errores | `docker compose logs extract \| Select-String "servicio_saturado\|pdf_rechazado\|cliente_desconectado"` |
 | CPU y memoria por contenedor | `docker stats` |
-| Rutas y replicas que ve Traefik | http://localhost:8080/dashboard/ |
-| Metricas en el tiempo | `docker compose --profile monitoreo up -d` y abrir http://localhost:3000 |
+| Rutas y replicas que ve Traefik | http://localhost:8080/dashboard/ (solo desde esta maquina) |
+| Metricas en el tiempo | `docker compose --profile monitoreo up -d` y abrir http://localhost:3000 (Grafana) o http://localhost:9090 (Prometheus), solo desde esta maquina |
 | Cola y rechazos de una replica | `curl.exe http://127.0.0.1/metrics` (cada request va a una replica distinta) |
+
+El dashboard de Traefik (8080), Prometheus (9090) y Grafana (3000) escuchan
+solo en `127.0.0.1`: desde otra maquina de la red no se abren (la API de
+Traefik y Grafana anonimo no quedan expuestos). Para verlos desde otra PC, usar
+un tunel SSH (`ssh -L 3000:127.0.0.1:3000 usuario@esta-pc`) en lugar de abrir
+los puertos.
 
 Eventos de log utiles: `pdf_extraido` (bytes, paginas, duracion),
 `servicio_saturado` (503), `pdf_rechazado` (400/413/422),

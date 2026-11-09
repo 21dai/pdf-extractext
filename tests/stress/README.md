@@ -154,6 +154,11 @@ Con `-Navegador` levanta tambien Prometheus y Grafana, abre Grafana, muestra
 el dashboard de k6 en vivo en http://localhost:5665 durante el spike y al
 final abre los reportes HTML del spike y de Vegeta.
 
+Grafana (3000), Prometheus (9090) y el dashboard de Traefik (8080) solo se
+publican en `127.0.0.1`: se abren desde la misma PC donde corre el stack. Las
+pruebas no pasan por esos puertos: k6 y Vegeta usan `http://traefik` dentro de
+la red de Docker (o el puerto 80) y Prometheus lee a Traefik en `traefik:8080`.
+
 `simulacion_spike.py` simula el spike con distintas politicas de cola (sin
 Docker): ver el experimento 14 del informe.
 

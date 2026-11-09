@@ -282,7 +282,12 @@ Traefik, asi que se cambia sin reconstruir la imagen
 ajustar tambien el `port` del job `extract` en `monitoring/prometheus.yml`:
 Prometheus no lee variables de entorno. Si una replica se cae o se apaga, Traefik
 reintenta en otra; con `docker compose --profile monitoreo up -d` se agregan
-Prometheus y Grafana (`http://localhost:3000`). Usa los mismos puertos que el stack
+Prometheus (`http://localhost:9090`) y Grafana (`http://localhost:3000`).
+El dashboard de Traefik, Prometheus y Grafana se publican solo en
+`127.0.0.1`: se abren desde esta maquina, no desde otra de la red (Grafana
+tiene acceso anonimo). k6 y Vegeta entran por la red de Docker
+(`http://traefik`) y Prometheus lee a Traefik en `traefik:8080`, asi que no
+los afecta. Usa los mismos puertos que el stack
 completo del repo `infrastructure`: no levantar los dos a la vez. Las pruebas
 de carga del TP estan en [tests/stress](tests/stress/README.md), el plan en
 [docs/PLAN-TP.md](docs/PLAN-TP.md) y las mediciones en
