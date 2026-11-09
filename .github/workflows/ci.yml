@@ -2,7 +2,8 @@
 #   1. formato y lint (black, isort, flake8) y tipos (mypy)
 #   2. tests (pytest; el servicio no usa base de datos) con cobertura minima
 #      del 95 % del paquete app
-#   3. build de la imagen Docker y smoke test de /health y POST /extract
+#   3. build de la imagen Docker y smoke test de /health y POST /extract, en el
+#      puerto por defecto y con PORT=9000
 #   4. escaneo de secretos en el historial (trufflehog)
 #      y vulnerabilidades conocidas en las dependencias (pip-audit)
 #   5. convencion de commits en PRs: tipo(#N): descripcion, con (#N) opcional
@@ -53,10 +54,23 @@ jobs:
             --data-binary "@tests/stress/pdfs/2020-Scrum-Guide-Spanish-Latin-South-American.pdf" \
             http://127.0.0.1:8000/extract -o respuesta.json
           python3 -c "import json; r = json.load(open('respuesta.json')); assert r['page_count'] == 16, r['page_count']; print('page_count', r['page_count'])"
+      - name: Smoke test con otro puerto (PORT=9000)
+        run: |
+          docker run -d --rm --name extract-9000 -e PORT=9000 -p 9000:9000 pdf-extractext:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/health; then echo; break; fi
+            sleep 1
+          done
+          curl -fsS -H "Content-Type: application/pdf" \
+            --data-binary "@tests/stress/pdfs/2020-Scrum-Guide-Spanish-Latin-South-American.pdf" \
+            http://127.0.0.1:9000/extract -o respuesta-9000.json
+          python3 -c "import json; r = json.load(open('respuesta-9000.json')); assert r['page_count'] == 16, r['page_count']; print('PORT=9000 page_count', r['page_count'])"
       - if: always()
         run: docker logs extract || true
       - if: always()
-        run: docker stop extract || true
+        run: docker logs extract-9000 || true
+      - if: always()
+        run: docker stop extract extract-9000 || true
 
   secretos:
     name: Escaneo de secretos
@@ -94,5 +108,7 @@ jobs:
           fallos=0
           while IFS= read -r msg; do
             if [[ "$msg" =~ $pattern ]]; then echo "OK   $msg"; else echo "MAL  $msg"; fallos=1; fi
-          done < <(git log --format=%s "origin/${{ github.base_ref }}..HEAD")
+          # --no-merges: en un PR, HEAD es el merge que arma GitHub ("Merge <sha> into <sha>"),
+          # que no es un commit del autor y no sigue el formato.
+          done < <(git log --no-merges --format=%s "origin/${{ github.base_ref }}..HEAD")
           exit $fallos

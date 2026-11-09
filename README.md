@@ -125,6 +125,8 @@ LOG_LEVEL=INFO
 
 HOST=0.0.0.0
 PORT=8000
+# Puerto de las replicas del stack del TP (docker-compose.yml de la raiz).
+EXTRACT_PORT=8000
 # Procesos de uvicorn: PDFs que se extraen en paralelo. 1 en desarrollo;
 # en Docker, tantos como nucleos quieras dedicar (la extraccion es CPU).
 WEB_CONCURRENCY=1
@@ -188,6 +190,14 @@ docker compose --env-file .env -f docker/docker-compose.yml up -d --build   # co
 docker compose --env-file .env -f docker/docker-compose.yml ps              # estado
 docker compose --env-file .env -f docker/docker-compose.yml logs -f api     # logs
 docker compose --env-file .env -f docker/docker-compose.yml down            # apagar
+```
+
+La imagen se etiqueta con `IMAGE_TAG` del `.env` (`pdf-extractext:2.0.0`,
+factor V). Sin esa variable, o sin `--env-file .env`, el compose falla en vez
+de construir una imagen `latest`:
+
+```text
+required variable IMAGE_TAG is missing a value: definir IMAGE_TAG en .env (ver .env.example)
 ```
 
 > Nota: el nombre del contenedor puede variar (`docker-api-1`, `docker_api_1`, etc.) según la versión/configuración de Docker Compose.
@@ -265,9 +275,19 @@ docker compose up --build
 
 Queda en `http://127.0.0.1/extract` y en
 `https://extract.universidad.localhost/extract`; el dashboard de Traefik en
-`http://localhost:8080/dashboard/`. Si una replica se cae o se apaga, Traefik
+`http://localhost:8080/dashboard/`. El puerto de las replicas sale de
+`EXTRACT_PORT` (8000 por defecto): lo usan `PORT`, el healthcheck y la label de
+Traefik, asi que se cambia sin reconstruir la imagen
+(`$env:EXTRACT_PORT=9000; docker compose up -d`). Con el perfil `monitoreo`,
+ajustar tambien el `port` del job `extract` en `monitoring/prometheus.yml`:
+Prometheus no lee variables de entorno. Si una replica se cae o se apaga, Traefik
 reintenta en otra; con `docker compose --profile monitoreo up -d` se agregan
-Prometheus y Grafana (`http://localhost:3000`). Usa los mismos puertos que el stack
+Prometheus (`http://localhost:9090`) y Grafana (`http://localhost:3000`).
+El dashboard de Traefik, Prometheus y Grafana se publican solo en
+`127.0.0.1`: se abren desde esta maquina, no desde otra de la red (Grafana
+tiene acceso anonimo). k6 y Vegeta entran por la red de Docker
+(`http://traefik`) y Prometheus lee a Traefik en `traefik:8080`, asi que no
+los afecta. Usa los mismos puertos que el stack
 completo del repo `infrastructure`: no levantar los dos a la vez. Las pruebas
 de carga del TP estan en [tests/stress](tests/stress/README.md), el plan en
 [docs/PLAN-TP.md](docs/PLAN-TP.md) y las mediciones en

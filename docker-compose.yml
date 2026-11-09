@@ -11,7 +11,7 @@
 #   POST http://127.0.0.1/extract                     (Vegeta)
 #   POST https://extract.universidad.localhost/extract  (k6; certificado
 #        autofirmado de Traefik: usar --insecure-skip-tls-verify)
-#   Dashboard de Traefik: http://localhost:8080/dashboard/
+#   Dashboard de Traefik: http://localhost:8080/dashboard/ (solo desde esta maquina)
 #   Monitoreo (opcional): docker compose --profile monitoreo up -d
 name: pdf-extractext-tp
 
@@ -33,7 +33,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
+      # Dashboard y API insegura de Traefik: solo desde esta maquina (igual que
+      # infrastructure#3). k6, Vegeta y Prometheus entran por la red de Docker
+      # (http://traefik, traefik:8080), asi que no los afecta.
+      - "127.0.0.1:8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     deploy:
@@ -54,7 +57,9 @@ services:
     stop_grace_period: ${STOP_GRACE_PERIOD:-35s}
     environment:
       HOST: 0.0.0.0
-      PORT: 8000
+      # Puerto de las replicas: el mismo valor lo usan el healthcheck (lee PORT)
+      # y la label de Traefik. Se cambia con EXTRACT_PORT sin tocar la imagen.
+      PORT: ${EXTRACT_PORT:-8000}
       # Un proceso por replica: con 1 CPU de limite, mas procesos compiten
       # por el mismo nucleo (a medir en la Fase 2 del plan).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
@@ -76,7 +81,9 @@ services:
     # Chequeo liviano: python sin site ni imports pesados (-S -I) y un socket
     # en lugar de urllib, que carga ssl y email. Medido en reposo: urllib cada
     # 5 s gastaba 12 % de un nucleo por replica; asi, cada 10 s, ~3 %. Al
-    # arrancar chequea cada 1 s para volver rapido al balanceo.
+    # arrancar chequea cada 1 s para volver rapido al balanceo. El puerto sale
+    # de PORT: os es un modulo congelado del interprete, importarlo no cambia
+    # el costo del chequeo.
     healthcheck:
       test:
         [
@@ -85,7 +92,7 @@ services:
           "-S",
           "-I",
           "-c",
-          "import socket; s = socket.create_connection(('127.0.0.1', 8000), 2); s.sendall(b'GET /health HTTP/1.0\\r\\n\\r\\n'); raise SystemExit(0 if b' 200 ' in s.recv(64) else 1)",
+          "import os, socket; s = socket.create_connection(('127.0.0.1', int(os.environ.get('PORT', '8000'))), 2); s.sendall(b'GET /health HTTP/1.0\\r\\n\\r\\n'); raise SystemExit(0 if b' 200 ' in s.recv(64) else 1)",
         ]
       interval: 10s
       timeout: 5s
@@ -100,7 +107,7 @@ services:
       - "traefik.http.routers.extract-tls.rule=PathPrefix(`/`)"
       - "traefik.http.routers.extract-tls.entrypoints=websecure"
       - "traefik.http.routers.extract-tls.tls=true"
-      - "traefik.http.services.extract.loadbalancer.server.port=8000"
+      - "traefik.http.services.extract.loadbalancer.server.port=${EXTRACT_PORT:-8000}"
       # Estrategia de balanceo: wrr (round robin), p2c (de dos replicas al azar,
       # la de menos requests en vuelo) o leasttime (la que responde mas rapido).
       - "traefik.http.services.extract.loadbalancer.strategy=${LB_STRATEGY:-wrr}"
@@ -117,13 +124,14 @@ services:
   #   docker compose --profile monitoreo up -d
   #   Grafana: http://localhost:3000 (dashboard "TP - POST /extract")
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.16.0
     profiles: ["monitoreo"]
     restart: unless-stopped
     volumes:
       - "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    # Solo desde esta maquina: Grafana lo lee por la red de Docker.
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     deploy:
       resources:
         limits:
@@ -131,7 +139,7 @@ services:
           memory: 256M
 
   grafana:
-    image: grafana/grafana:12.0.0
+    image: grafana/grafana:13.3.0
     profiles: ["monitoreo"]
     restart: unless-stopped
     environment:
@@ -142,8 +150,9 @@ services:
     volumes:
       - "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro"
       - "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+    # Solo desde esta maquina: el acceso anonimo no queda abierto a la red.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - prometheus
     deploy:
