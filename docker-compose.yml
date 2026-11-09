@@ -11,7 +11,7 @@
 #   POST http://127.0.0.1/extract                     (Vegeta)
 #   POST https://extract.universidad.localhost/extract  (k6; certificado
 #        autofirmado de Traefik: usar --insecure-skip-tls-verify)
-#   Dashboard de Traefik: http://localhost:8080/dashboard/
+#   Dashboard de Traefik: http://localhost:8080/dashboard/ (solo desde esta maquina)
 #   Monitoreo (opcional): docker compose --profile monitoreo up -d
 name: pdf-extractext-tp
 
@@ -33,7 +33,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
+      # Dashboard y API insegura de Traefik: solo desde esta maquina (igual que
+      # infrastructure#3). k6, Vegeta y Prometheus entran por la red de Docker
+      # (http://traefik, traefik:8080), asi que no los afecta.
+      - "127.0.0.1:8080:8080"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
     deploy:
@@ -126,8 +129,9 @@ services:
     restart: unless-stopped
     volumes:
       - "./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    # Solo desde esta maquina: Grafana lo lee por la red de Docker.
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     deploy:
       resources:
         limits:
@@ -146,8 +150,9 @@ services:
     volumes:
       - "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro"
       - "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro"
+    # Solo desde esta maquina: el acceso anonimo no queda abierto a la red.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - prometheus
     deploy:
