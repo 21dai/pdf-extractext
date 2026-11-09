@@ -124,7 +124,7 @@ services:
   #   docker compose --profile monitoreo up -d
   #   Grafana: http://localhost:3000 (dashboard "TP - POST /extract")
   prometheus:
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.16.0
     profiles: ["monitoreo"]
     restart: unless-stopped
     volumes:
@@ -139,7 +139,7 @@ services:
           memory: 256M
 
   grafana:
-    image: grafana/grafana:12.0.0
+    image: grafana/grafana:13.3.0
     profiles: ["monitoreo"]
     restart: unless-stopped
     environment:
