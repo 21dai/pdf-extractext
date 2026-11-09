@@ -117,8 +117,8 @@ Variables principales:
 
 ```env
 APP_NAME=PDF Extract API
-APP_VERSION=2.0.0
-IMAGE_TAG=2.0.0
+APP_VERSION=2.0.1
+IMAGE_TAG=2.0.1
 DEBUG=False
 # Nivel de los logs JSON en stdout: DEBUG, INFO, WARNING, ERROR.
 LOG_LEVEL=INFO
@@ -192,7 +192,7 @@ docker compose --env-file .env -f docker/docker-compose.yml logs -f api     # lo
 docker compose --env-file .env -f docker/docker-compose.yml down            # apagar
 ```
 
-La imagen se etiqueta con `IMAGE_TAG` del `.env` (`pdf-extractext:2.0.0`,
+La imagen se etiqueta con `IMAGE_TAG` del `.env` (`pdf-extractext:2.0.1`,
 factor V). Sin esa variable, o sin `--env-file .env`, el compose falla en vez
 de construir una imagen `latest`:
 
