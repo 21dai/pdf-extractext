@@ -54,7 +54,9 @@ services:
     stop_grace_period: ${STOP_GRACE_PERIOD:-35s}
     environment:
       HOST: 0.0.0.0
-      PORT: 8000
+      # Puerto de las replicas: el mismo valor lo usan el healthcheck (lee PORT)
+      # y la label de Traefik. Se cambia con EXTRACT_PORT sin tocar la imagen.
+      PORT: ${EXTRACT_PORT:-8000}
       # Un proceso por replica: con 1 CPU de limite, mas procesos compiten
       # por el mismo nucleo (a medir en la Fase 2 del plan).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
@@ -76,7 +78,9 @@ services:
     # Chequeo liviano: python sin site ni imports pesados (-S -I) y un socket
     # en lugar de urllib, que carga ssl y email. Medido en reposo: urllib cada
     # 5 s gastaba 12 % de un nucleo por replica; asi, cada 10 s, ~3 %. Al
-    # arrancar chequea cada 1 s para volver rapido al balanceo.
+    # arrancar chequea cada 1 s para volver rapido al balanceo. El puerto sale
+    # de PORT: os es un modulo congelado del interprete, importarlo no cambia
+    # el costo del chequeo.
     healthcheck:
       test:
         [
@@ -85,7 +89,7 @@ services:
           "-S",
           "-I",
           "-c",
-          "import socket; s = socket.create_connection(('127.0.0.1', 8000), 2); s.sendall(b'GET /health HTTP/1.0\\r\\n\\r\\n'); raise SystemExit(0 if b' 200 ' in s.recv(64) else 1)",
+          "import os, socket; s = socket.create_connection(('127.0.0.1', int(os.environ.get('PORT', '8000'))), 2); s.sendall(b'GET /health HTTP/1.0\\r\\n\\r\\n'); raise SystemExit(0 if b' 200 ' in s.recv(64) else 1)",
         ]
       interval: 10s
       timeout: 5s
@@ -100,7 +104,7 @@ services:
       - "traefik.http.routers.extract-tls.rule=PathPrefix(`/`)"
       - "traefik.http.routers.extract-tls.entrypoints=websecure"
       - "traefik.http.routers.extract-tls.tls=true"
-      - "traefik.http.services.extract.loadbalancer.server.port=8000"
+      - "traefik.http.services.extract.loadbalancer.server.port=${EXTRACT_PORT:-8000}"
       # Estrategia de balanceo: wrr (round robin), p2c (de dos replicas al azar,
       # la de menos requests en vuelo) o leasttime (la que responde mas rapido).
       - "traefik.http.services.extract.loadbalancer.strategy=${LB_STRATEGY:-wrr}"
