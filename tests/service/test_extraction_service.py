@@ -3,9 +3,9 @@
 import pytest
 
 from app.core.exceptions import InvalidPdfError, PdfTooLargeError
-from app.core.pdf_extraction import PdfExtraction, PdfiumExtractor
+from app.core.pdf_extraction import PdfExtraction
 from app.services import ExtractionService
-from tests.support.pdf import DEFAULT_PDF_TEXT, MINIMAL_PDF_BYTES
+from tests.support.pdf import MINIMAL_PDF_BYTES
 
 
 class FakeExtractor:
@@ -31,11 +31,10 @@ class TestEngineIsPluggable:
         assert result == PdfExtraction(text="# Falso", page_count=7)
         assert engine.received == [MINIMAL_PDF_BYTES]
 
-    def test_uses_pdfium_by_default(self):
-        service = ExtractionService(max_pdf_size_bytes=1024)
-
-        assert isinstance(service.extractor, PdfiumExtractor)
-        assert DEFAULT_PDF_TEXT in service.extract(MINIMAL_PDF_BYTES).text
+    def test_the_engine_is_not_optional(self):
+        """El motor no tiene default: si no se pasa, el servicio no se puede crear."""
+        with pytest.raises(TypeError):
+            ExtractionService(max_pdf_size_bytes=1024)
 
 
 class TestValidationRunsBeforeTheEngine:

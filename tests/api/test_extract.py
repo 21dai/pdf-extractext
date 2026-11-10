@@ -6,9 +6,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.core.pdf_extraction import PdfExtraction
 from tests.support.pdf import DEFAULT_PDF_TEXT, MINIMAL_PDF_BYTES
 
 STRESS_PDFS = Path(__file__).resolve().parents[1] / "stress" / "pdfs"
+
+
+class FakeExtractor:
+    """Engine that records what it receives and returns a fixed result."""
+
+    def __init__(self) -> None:
+        self.received: list[bytes] = []
+
+    def extract(self, source: bytes) -> PdfExtraction:
+        self.received.append(source)
+        return PdfExtraction(text="# Falso", page_count=7)
 
 
 def post_raw(client: TestClient, content: bytes, content_type="application/pdf"):
@@ -82,6 +94,19 @@ class TestExtractReturnsMarkdown:
 
         assert "\n## Teoría de Scrum\n" in content
         assert "\n## Valores de Scrum\n" in content
+
+
+class TestExtractUsesTheEngineOfTheCompositionRoot:
+    """/extract uses the engine that the composition root chose."""
+
+    def test_the_engine_of_the_app_is_the_one_that_extracts(self, client: TestClient):
+        """Si el router creara su propio motor, este motor falso no se usaria."""
+        client.app.state.pdf_extractor = FakeExtractor()
+
+        body = post_raw(client, MINIMAL_PDF_BYTES).json()
+
+        assert body["content"] == "# Falso"
+        assert body["page_count"] == 7
 
 
 class TestExtractIsStateless:
