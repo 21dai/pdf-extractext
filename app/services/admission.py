@@ -12,15 +12,19 @@ La compuerta:
    La cola se acota por cantidad y no por una estimacion de tiempo: durante
    un ataque la CPU esta saturada y cada extraccion tarda mas, pero esa cola
    se vacia mucho mas rapido cuando el ataque termina; una estimacion hecha
-   en el momento admitia de menos y dejaba capacidad sin usar. El limite
-   tambien acota la memoria de los PDFs que esperan.
-2. Corre una extraccion por vez: los admitidos esperan su turno en asyncio
+   en el momento admitia de menos y dejaba capacidad sin usar.
+2. Ademas acota la memoria: la cola tiene un presupuesto de bytes
+   (`max_pending_bytes`). La cantidad de requests no acota la memoria: con
+   60 PDFs de 10 MB son 600 MB, y la replica del TP tiene 1 GB. El PDF que no
+   cabe se rechaza con 503, antes de leerlo si el cliente manda
+   Content-Length, y al confirmarlo con el tamano leido si no lo manda.
+3. Corre una extraccion por vez: los admitidos esperan su turno en asyncio
    (barato) en vez de bloquear un hilo cada uno contra el lock de PDFium. El
    event loop sigue atendiendo HTTP mientras se extrae. Con `queue_order`
    "size", el turno es del PDF mas liviano que espera (sale rapido y no queda
    detras de uno pesado); el que ya espero `priority_age_seconds` pasa
    primero, para que ninguno se quede sin turno.
-3. Cuando le toca el turno, si el cliente ya se fue o si el request no
+4. Cuando le toca el turno, si el cliente ya se fue o si el request no
    llegaria a terminar dentro de `max_wait_seconds` (su tiempo util: lo que
    ya espero mas una extraccion pesimista, el promedio mas 4 desvios, como el
    temporizador de retransmision de TCP en la RFC 6298), no hace el trabajo:
@@ -79,6 +83,7 @@ class AdmissionGate:
         smoothing: float = 0.05,
         queue_order: QueueOrder = "fifo",
         priority_age_seconds: float | None = None,
+        max_pending_bytes: int | None = None,
         clock: Callable[[], float] = time.monotonic,
         observer: GateObserver | None = None,
     ):
@@ -97,12 +102,17 @@ class AdmissionGate:
             queue_order: "fifo" (arrival order) or "size" (lightest first)
             priority_age_seconds: With "size", a request that waited this
                 long goes first; half the useful life if not given
+            max_pending_bytes: Memory the queue can hold, in bytes of PDF. The
+                count of requests does not bound the memory: 60 PDFs of 10 MB
+                are 600 MB. Without it the queue is only bounded by count.
             clock: Monotonic clock, injectable for tests
             observer: Receives the queue size, the rejections and the
                 extraction times (the metrics); nothing if not given
         """
         self.max_wait_seconds = max_wait_seconds
         self.max_pending = max_pending
+        self.max_pending_bytes = max_pending_bytes
+        self.pending_bytes = 0
         self.service_seconds = initial_service_seconds
         self.service_deviation_seconds = 0.0
         self.smoothing = smoothing
@@ -115,18 +125,38 @@ class AdmissionGate:
         self.priority_age_seconds = priority_age_seconds
         self._turn = _Turn(queue_order, priority_age_seconds, clock)
 
-    def admit(self) -> "Ticket":
+    def admit(self, declared_bytes: int | None = None) -> "Ticket":
         """Admit a request, or reject it if the queue is full.
 
+        Args:
+            declared_bytes: Size the client declared in Content-Length, if it
+                sent one. It tells how much memory the request is about to
+                take, before reading the PDF.
+
         Raises:
-            ServiceOverloadedError: If `max_pending` requests are already in.
+            ServiceOverloadedError: If `max_pending` requests are already in,
+                or if the PDF would not fit in the memory budget.
         """
         if self.pending >= self.max_pending:
             self.observer.rejected("cola_llena")
             raise self._overloaded(self.pending * self.service_seconds)
+        if self._exceeds_budget(declared_bytes):
+            self.observer.rejected("memoria")
+            raise self._overloaded(self.pending * self.service_seconds)
         self.pending += 1
+        self.pending_bytes += declared_bytes or 0
         self.observer.queue_changed(self.pending)
-        return Ticket(self, admitted_at=self._clock())
+        return Ticket(
+            self,
+            admitted_at=self._clock(),
+            reserved_bytes=declared_bytes or 0,
+        )
+
+    def _exceeds_budget(self, size: int | None) -> bool:
+        """Whether a PDF of that size would not fit in the memory budget."""
+        if self.max_pending_bytes is None or size is None:
+            return False
+        return self.pending_bytes + size > self.max_pending_bytes
 
     def _overloaded(self, estimated_wait: float) -> ServiceOverloadedError:
         return ServiceOverloadedError(max(1, math.ceil(estimated_wait)))
@@ -206,11 +236,14 @@ class _Turn:
 class Ticket:
     """Place of an admitted request; free it with `release` or a with block."""
 
-    def __init__(self, gate: AdmissionGate, admitted_at: float):
+    def __init__(
+        self, gate: AdmissionGate, admitted_at: float, reserved_bytes: int = 0
+    ):
         self._gate = gate
         self._admitted_at = admitted_at
         self._upload_seconds = 0.0
         self._released = False
+        self._reserved_bytes = reserved_bytes
 
     def __enter__(self) -> "Ticket":
         return self
@@ -222,10 +255,30 @@ class Ticket:
         """Note that the whole PDF arrived, to know how long the upload took."""
         self._upload_seconds = self._gate._clock() - self._admitted_at
 
+    def account_bytes(self, size: int) -> None:
+        """Count the bytes of the PDF that was read against the memory budget.
+
+        The declared size is only an estimate (multipart adds its overhead),
+        so the read size is the one that counts. A PDF that does not fit is
+        rejected here: the body was read, but nothing is extracted.
+
+        Raises:
+            ServiceOverloadedError: If the PDF does not fit in the budget.
+        """
+        gate = self._gate
+        if gate.max_pending_bytes is not None:
+            projected = gate.pending_bytes - self._reserved_bytes + size
+            if projected > gate.max_pending_bytes:
+                gate.observer.rejected("memoria")
+                raise gate._overloaded(gate.pending * gate.service_seconds)
+        gate.pending_bytes += size - self._reserved_bytes
+        self._reserved_bytes = size
+
     def release(self) -> None:
         if not self._released:
             self._released = True
             self._gate.pending -= 1
+            self._gate.pending_bytes -= self._reserved_bytes
             self._gate.observer.queue_changed(self._gate.pending)
 
     async def run(

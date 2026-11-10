@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, Request, status
 from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import get_admission_gate, get_pdf_extractor
-from app.api.uploads import form_file, is_multipart, multipart_form, read_raw_body
+from app.api.uploads import (
+    declared_size,
+    form_file,
+    is_multipart,
+    multipart_form,
+    read_raw_body,
+)
 from app.config import settings
 from app.core.pdf_extraction import PdfExtraction, PdfExtractor
 from app.schemas import ExtractResponse
@@ -70,13 +76,15 @@ async def extract(
     Si la replica ya tiene mas trabajo del que puede terminar a tiempo,
     responde 503 con Retry-After antes de leer el PDF (backpressure).
     """
-    with gate.admit() as ticket:
+    with gate.admit(declared_bytes=declared_size(request)) as ticket:
         if is_multipart(request):
             async with multipart_form(request, service.max_pdf_size_bytes) as form:
                 content, _ = await form_file(form, "file")
         else:
             content = await read_raw_body(request, service.max_pdf_size_bytes)
         ticket.body_received()
+        # El tamano declarado era una estimacion: el leido es el que cuenta.
+        ticket.account_bytes(len(content))
 
         async def work() -> PdfExtraction:
             return await run_in_threadpool(service.extract, content)

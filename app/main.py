@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     app.state.admission_gate = AdmissionGate(
         max_wait_seconds=settings.extract_max_wait_seconds,
         max_pending=settings.extract_max_pending,
+        max_pending_bytes=settings.extract_max_pending_bytes,
         queue_order=settings.extract_queue_order,
         priority_age_seconds=settings.extract_priority_age_seconds,
         observer=metrics,

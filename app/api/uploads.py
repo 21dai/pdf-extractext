@@ -26,11 +26,17 @@ from app.core.validators import validate_pdf_size_limit
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
 
 
+def declared_size(request: Request) -> int | None:
+    """Size the client declared in Content-Length, if it sent one."""
+    declared = request.headers.get("content-length", "")
+    return int(declared) if declared.isdigit() else None
+
+
 def reject_declared_size(request: Request, max_size_bytes: int) -> None:
     """Reject by Content-Length before reading anything, when the client sends it."""
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit():
-        validate_pdf_size_limit(int(declared), max_size_bytes)
+    declared = declared_size(request)
+    if declared is not None:
+        validate_pdf_size_limit(declared, max_size_bytes)
 
 
 async def _limited(

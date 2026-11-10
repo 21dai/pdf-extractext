@@ -67,6 +67,9 @@ services:
       # Backpressure: espera maxima con la que se admite un request (ver README).
       EXTRACT_MAX_WAIT_SECONDS: ${EXTRACT_MAX_WAIT_SECONDS:-25}
       EXTRACT_MAX_PENDING: ${EXTRACT_MAX_PENDING:-60}
+      # Memoria de la cola: con 60 PDFs de 10 MB serian 600 MB, y la replica
+      # tiene 1 GB de limite.
+      EXTRACT_MAX_PENDING_BYTES: ${EXTRACT_MAX_PENDING_BYTES:-134217728}
       # size: primero el PDF mas liviano (con un nucleo por replica); fifo: por
       # orden de llegada (conviene si la maquina tiene menos nucleos que replicas).
       EXTRACT_QUEUE_ORDER: ${EXTRACT_QUEUE_ORDER:-size}

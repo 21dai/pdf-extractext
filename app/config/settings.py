@@ -49,8 +49,13 @@ class Settings(BaseSettings):
     # (30 s en el TP).
     extract_max_wait_seconds: float = 25.0
     # Requests de /extract admitidos a la vez por proceso (la cola). Llena,
-    # el siguiente recibe 503. Acota la memoria de los PDFs que esperan.
+    # el siguiente recibe 503.
     extract_max_pending: int = 60
+    # Bytes de PDF que la cola puede tener esperando a la vez. `extract_max_pending`
+    # acota la cantidad de requests, no la memoria: con 60 PDFs de 10 MB serian
+    # 600 MB, y la replica del TP tiene 1 GB de limite. Este limite acota los
+    # bytes de verdad: el PDF se rechaza con 503 antes de leerlo.
+    extract_max_pending_bytes: int = 128 * 1024 * 1024
     # Orden de la cola de /extract: "size" atiende primero el PDF mas liviano
     # (menos bytes); "fifo", por orden de llegada. Con "size", el que ya espero
     # EXTRACT_PRIORITY_AGE_SECONDS pasa primero para que los grandes no se

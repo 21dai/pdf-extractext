@@ -20,7 +20,12 @@ from prometheus_client import (
 )
 
 # Motivos de rechazo de la compuerta (etiqueta `motivo`).
-REJECTION_REASONS = ("cola_llena", "tiempo_util", "cliente_desconectado")
+REJECTION_REASONS = (
+    "cola_llena",
+    "memoria",
+    "tiempo_util",
+    "cliente_desconectado",
+)
 
 # Cubre desde un PDF chico con la CPU libre hasta uno grande con la CPU
 # saturada (de ~50 ms a varios segundos).
