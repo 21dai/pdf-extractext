@@ -46,9 +46,10 @@ Archivos principales:
 - `app/api/uploads.py`: lectura del upload. El PDF queda en memoria (nunca en
   un archivo temporal) y un body demasiado grande se rechaza con 413 por
   `Content-Length` o apenas se pasa del limite
-- `app/api/dependencies.py`: la compuerta de admision del proceso
+- `app/api/dependencies.py`: la compuerta de admision del proceso y el motor de
+  extraccion, los dos elegidos en el composition root (`app/main.py`)
 - `app/utils/problem_details.py`: traduce cada error de dominio a su respuesta
-  RFC 9457 (400, 413, 422, 503); los routers no atrapan errores genericos
+  RFC 9457 (400, 404, 413, 422, 503); los routers no atrapan errores genericos
 
 ## 2. Capa de logica de negocio
 
@@ -63,8 +64,10 @@ Ubicacion: `app/services/`
 - `app/utils/metrics.py`: el observador que publica las metricas de la
   compuerta en `GET /metrics` (formato Prometheus)
 
-`ExtractionService` recibe su motor (`PdfExtractor`) por constructor: se puede
-probar con motores falsos y cambiar de motor sin tocar el router.
+`ExtractionService` recibe su motor (`PdfExtractor`) por constructor y no tiene
+default: se puede probar con motores falsos y cambiar de motor sin tocar el
+router. El motor concreto se elige en el composition root (`app/main.py`), que
+es el unico lugar que sabe cual se usa.
 
 ## Nucleo
 
@@ -74,12 +77,13 @@ Reglas puras, sin FastAPI, testeables sin levantar nada:
 
 - `validators.py`: firma `%PDF-` y tamano
 - `exceptions.py`: errores de dominio; se traducen a 400, 413, 422 y 503
-- `pdf_extraction.py`: texto y cantidad de paginas con `pypdfium2` (PDFium, el
-  motor de Chrome). PDFium no es thread-safe: se serializa con un lock por
-  proceso, y el paralelismo viene de los procesos de uvicorn y las replicas.
-  El motor esta detras de la interfaz `PdfExtractor` (`PdfiumExtractor` por
-  defecto): `ExtractionService` la recibe por constructor, asi otro motor se
-  prueba y se mide sin tocar el servicio ni el router
+- `pdf_extraction.py`: contenido en Markdown y cantidad de paginas con
+  `pypdfium2` (PDFium, el motor de Chrome). PDFium no es thread-safe: se
+  serializa con un lock por proceso, y el paralelismo viene de los procesos de
+  uvicorn y las replicas. El motor esta detras de la interfaz `PdfExtractor`
+  (`PdfiumExtractor`): `ExtractionService` la recibe por constructor, asi otro
+  motor se prueba y se mide sin tocar el servicio ni el router. No hay un
+  camino de texto plano: con el CRUD retirado (ADR-0008) nada lo consume
 - `markdown.py`: convierte las lineas de cada pagina a Markdown; los titulos
   salen de la altura de las letras comparada con la del cuerpo
 
@@ -94,14 +98,15 @@ flowchart LR
     C[Cliente: orquestador, k6 / Vegeta] -->|POST /extract| T[Traefik<br/>round robin + reintentos]
     T --> R[5 replicas<br/>1 CPU, 1 GB y 1 proceso cada una]
     subgraph Replica [dentro de cada replica]
-        G[AdmissionGate<br/>cola de 60, tiempo util 25 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
+        G[AdmissionGate<br/>cola de 60 requests y 128 MB de PDF,<br/>tiempo util 25 s] --> E[ExtractionService] --> P[PdfExtractor<br/>PDFium + Markdown]
     end
     R --> G
     T -.metricas.-> PR[Prometheus] --> GR[Grafana]
 ```
 
-1. `AdmissionGate` admite el request si la cola de la replica tiene lugar; si
-   no, 503 con `Retry-After` antes de leer el PDF.
+1. `AdmissionGate` admite el request si la cola de la replica tiene lugar y el
+   PDF cabe en el presupuesto de memoria de la cola; si no, 503 con
+   `Retry-After` antes de leer el PDF.
 2. Se lee el body en memoria (crudo o multipart) y se espera el turno: una
    extraccion por vez por proceso.
 3. Si el cliente ya se fue o el request espero mas que su tiempo util, no se
