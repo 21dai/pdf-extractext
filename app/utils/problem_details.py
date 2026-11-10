@@ -5,9 +5,10 @@ from collections.abc import Sequence
 from http import HTTPStatus
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from starlette.exceptions import HTTPException
 
 from app.core.exceptions import (
     ClientDisconnectedError,
@@ -75,6 +76,9 @@ def _problem_details_payload(
 def register_problem_details_handlers(app: FastAPI) -> None:
     """Register exception handlers that emit RFC 9457 responses."""
 
+    # Se registra la clase de Starlette, no la de FastAPI: las dos la heredan,
+    # y los 404 y 405 de las rutas que no existen las lanza Starlette. Con la
+    # de FastAPI esos errores respondian el JSON plano, no problem details.
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
