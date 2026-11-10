@@ -38,6 +38,15 @@ async def _domain_exception_response(
         detail=str(exc),
         instance=str(request.url),
     )
+    return _problem_response(status_code, payload)
+
+
+def _problem_response(status_code: int, payload: dict) -> JSONResponse:
+    """Build the RFC 9457 response of a payload.
+
+    Todas las respuestas de error pasan por aca: el media type y la forma del
+    documento son los mismos en los 400, 404, 409, 413, 422 y 503.
+    """
     return JSONResponse(
         status_code=status_code,
         content=payload,
@@ -87,11 +96,7 @@ def register_problem_details_handlers(app: FastAPI) -> None:
             detail=detail,
             instance=str(request.url),
         )
-        return JSONResponse(
-            status_code=exc.status_code,
-            content=payload,
-            media_type="application/problem+json",
-        )
+        return _problem_response(exc.status_code, payload)
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -103,11 +108,7 @@ def register_problem_details_handlers(app: FastAPI) -> None:
             instance=str(request.url),
             errors=exc.errors(),
         )
-        return JSONResponse(
-            status_code=422,
-            content=payload,
-            media_type="application/problem+json",
-        )
+        return _problem_response(422, payload)
 
     # Rechazos de POST /extract: el router deja propagar los errores de
     # dominio y se traducen aca.
