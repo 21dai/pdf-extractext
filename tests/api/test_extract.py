@@ -109,6 +109,37 @@ class TestExtractUsesTheEngineOfTheCompositionRoot:
         assert body["page_count"] == 7
 
 
+class TestErrorResponsesUseProblemDetails:
+    """Every error of the API answers with the same RFC 9457 document."""
+
+    def test_an_unknown_route_answers_with_problem_details(self, client: TestClient):
+        """Test the 404 of a route that does not exist is a problem details."""
+        response = client.get("/no-existe")
+
+        assert response.status_code == 404
+        assert response.headers["content-type"].startswith("application/problem+json")
+        body = response.json()
+        assert body["type"] == "about:blank"
+        assert body["title"] == "Not Found"
+        assert body["status"] == 404
+        assert body["instance"].endswith("/no-existe")
+
+    def test_a_client_that_leaves_before_its_turn_answers_499(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Test a request whose client left is not processed and answers 499."""
+        from fastapi import Request
+
+        async def disconnected(self) -> bool:
+            return True
+
+        monkeypatch.setattr(Request, "is_disconnected", disconnected)
+
+        response = post_raw(client, MINIMAL_PDF_BYTES)
+
+        assert response.status_code == 499
+
+
 class TestExtractIsStateless:
     """/extract does not persist anything: it is a pure transformation."""
 
