@@ -35,6 +35,64 @@ def make_gate(**overrides) -> AdmissionGate:
     return AdmissionGate(**options)
 
 
+class TestMemoryBudget:
+    """The queue is bounded by bytes too: it accounts for the real memory.
+
+    `max_pending` acota la cantidad de requests, no la memoria: con 60 PDFs de
+    10 MB la cola puede tener 600 MB, y la replica del TP tiene 1 GB.
+    """
+
+    def test_the_admitted_bytes_are_counted(self):
+        gate = make_gate(max_pending_bytes=100)
+
+        ticket = gate.admit(declared_bytes=60)
+
+        assert gate.pending_bytes == 60
+        ticket.release()
+
+    def test_rejects_when_the_byte_budget_would_be_exceeded(self):
+        gate = make_gate(max_pending_bytes=100)
+        ticket = gate.admit(declared_bytes=60)
+
+        with pytest.raises(ServiceOverloadedError):
+            gate.admit(declared_bytes=60)
+
+        assert gate.pending == 1
+        ticket.release()
+
+    def test_released_tickets_give_their_bytes_back(self):
+        gate = make_gate(max_pending_bytes=100)
+        ticket = gate.admit(declared_bytes=60)
+
+        ticket.release()
+
+        assert gate.pending_bytes == 0
+
+    def test_the_read_bytes_replace_the_declared_ones(self):
+        """The declared size is an estimate: the read one is the truth."""
+        gate = make_gate(max_pending_bytes=100)
+        ticket = gate.admit(declared_bytes=60)
+
+        ticket.account_bytes(90)
+
+        assert gate.pending_bytes == 90
+        ticket.release()
+
+    def test_a_pdf_that_does_not_fit_is_rejected_after_being_read(self):
+        gate = make_gate(max_pending_bytes=100)
+        ticket = gate.admit(declared_bytes=10)
+
+        with pytest.raises(ServiceOverloadedError):
+            ticket.account_bytes(200)
+
+    def test_without_a_byte_budget_the_queue_is_only_bounded_by_count(self):
+        gate = make_gate(max_pending_bytes=None)
+        ticket = gate.admit(declared_bytes=10_000_000)
+
+        assert gate.pending_bytes == 10_000_000
+        ticket.release()
+
+
 class TestAdmission:
     """The queue is bounded by count: it protects memory without guessing times.
 

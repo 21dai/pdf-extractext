@@ -97,6 +97,15 @@ class TestGateReportsToItsObserver:
             asyncio.run(scenario())
         assert observer.rejections == ["cliente_desconectado"]
 
+    def test_reports_a_request_that_does_not_fit_in_the_memory_budget(self):
+        observer = FakeObserver()
+        gate = make_gate(observer, max_pending_bytes=100)
+
+        with pytest.raises(ServiceOverloadedError):
+            gate.admit(declared_bytes=200)
+
+        assert observer.rejections == ["memoria"]
+
     def test_reports_how_long_each_extraction_took(self):
         now = [0.0]
         observer = FakeObserver()

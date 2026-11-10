@@ -140,6 +140,30 @@ class TestErrorResponsesUseProblemDetails:
         assert response.status_code == 499
 
 
+class TestExtractMemoryBudget:
+    """The queue is bounded by bytes: a PDF that does not fit is rejected."""
+
+    def test_a_pdf_that_does_not_fit_is_rejected_with_503(self, client: TestClient):
+        """Test a PDF bigger than the memory budget is rejected before reading it."""
+        client.app.state.admission_gate.max_pending_bytes = 10
+
+        response = post_raw(client, MINIMAL_PDF_BYTES)
+
+        assert response.status_code == 503
+        assert response.headers["content-type"].startswith("application/problem+json")
+        assert int(response.headers["retry-after"]) >= 1
+
+    def test_the_memory_of_the_queue_goes_back_when_the_request_ends(
+        self, client: TestClient
+    ):
+        """Test the bytes of the queue are released once the PDF is extracted."""
+        gate = client.app.state.admission_gate
+
+        post_raw(client, MINIMAL_PDF_BYTES)
+
+        assert gate.pending_bytes == 0
+
+
 class TestExtractIsStateless:
     """/extract does not persist anything: it is a pure transformation."""
 
