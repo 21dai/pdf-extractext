@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import extract_router
 from app.config import settings
+from app.core.pdf_extraction import PdfiumExtractor
 from app.services.admission import AdmissionGate
 from app.utils.metrics import PrometheusGateObserver
 from app.utils.problem_details import register_problem_details_handlers
@@ -65,6 +66,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # El motor de extraccion se elige aqui, en un solo lugar: el router lo
+    # recibe por dependencia, asi no hay un motor implicito que cambiar cada
+    # vez que se quiere medir otro.
+    app.state.pdf_extractor = PdfiumExtractor()
 
     # Una compuerta por proceso: cada uno extrae un PDF por vez (PDFium).
     metrics = PrometheusGateObserver()

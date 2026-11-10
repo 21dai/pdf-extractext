@@ -3,10 +3,10 @@
 from fastapi import APIRouter, Depends, Request, status
 from starlette.concurrency import run_in_threadpool
 
-from app.api.dependencies import get_admission_gate
+from app.api.dependencies import get_admission_gate, get_pdf_extractor
 from app.api.uploads import form_file, is_multipart, multipart_form, read_raw_body
 from app.config import settings
-from app.core.pdf_extraction import PdfExtraction
+from app.core.pdf_extraction import PdfExtraction, PdfExtractor
 from app.schemas import ExtractResponse
 from app.services import ExtractionService
 from app.services.admission import AdmissionGate
@@ -19,9 +19,13 @@ router = APIRouter(tags=["extraccion"])
 _PROBLEM = {"description": "Problem details (RFC 9457)"}
 
 
-def get_extraction_service() -> ExtractionService:
+def get_extraction_service(
+    extractor: PdfExtractor = Depends(get_pdf_extractor),
+) -> ExtractionService:
     """Dependency to obtain the extraction service."""
-    return ExtractionService(max_pdf_size_bytes=settings.max_pdf_size_bytes)
+    return ExtractionService(
+        max_pdf_size_bytes=settings.max_pdf_size_bytes, extractor=extractor
+    )
 
 
 @router.post(

@@ -3,7 +3,7 @@
 import logging
 import time
 
-from app.core.pdf_extraction import PdfExtraction, PdfExtractor, PdfiumExtractor
+from app.core.pdf_extraction import PdfExtraction, PdfExtractor
 from app.core.validators import validate_pdf_signature, validate_pdf_size
 
 logger = logging.getLogger(__name__)
@@ -17,15 +17,15 @@ class ExtractionService:
     puede escalar en replicas sin estado compartido (12-Factor VI).
     """
 
-    def __init__(self, max_pdf_size_bytes: int, extractor: PdfExtractor | None = None):
+    def __init__(self, max_pdf_size_bytes: int, extractor: PdfExtractor):
         """Initialize the service.
 
         Args:
             max_pdf_size_bytes: Largest PDF accepted, in bytes
-            extractor: Extraction engine; PDFium if not given
+            extractor: Extraction engine; the one the composition root chose
         """
         self.max_pdf_size_bytes = max_pdf_size_bytes
-        self.extractor = extractor or PdfiumExtractor()
+        self.extractor = extractor
 
     def extract(self, content: bytes) -> PdfExtraction:
         """Validate the PDF bytes and extract their content as Markdown.
