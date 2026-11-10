@@ -164,11 +164,30 @@ Hay tres formas de levantarlo, segun para que:
 | Para que | Compose | Comando |
 |---|---|---|
 | Desarrollar la API: una instancia en `:8000` | `docker/docker-compose.yml` | `make up` o los comandos de abajo |
-| El TP: Traefik + 5 replicas de `/extract` | `docker-compose.yml` de la raiz | `docker compose up --build` o `make tp-up` |
+| El TP: Traefik + 5 replicas de `/extract` | `docker-compose.yml` de la raiz | `.\scripts\levantar.ps1`, `docker compose up --build` o `make tp-up` |
 | Todo el sistema (orquestador + este servicio + document-store + MongoDB) | repo `infrastructure` | ver su README |
 
 Los tres usan los mismos puertos: no levantar dos a la vez. Ninguno de los
 compose de este repo levanta MongoDB: el servicio no lo usa.
+
+### Stack del TP con un script (Docker Desktop o Docker en WSL)
+
+Desde PowerShell, en la raiz del proyecto:
+
+```powershell
+.\scripts\levantar.ps1           # construye, levanta y espera a que todo este healthy
+.\scripts\levantar.ps1 -SinBuild # sin reconstruir la imagen
+.\scripts\levantar.ps1 -Apagar   # apagar
+```
+
+Detecta solo donde esta Docker: Docker Desktop si responde en Windows y, si
+no, Docker instalado dentro de una distro de WSL (los comandos se corren con
+`wsl.exe`). Se puede forzar con `-Docker windows` o `-Docker wsl`, y elegir la
+distro con `-Distro Ubuntu`. Con Docker en WSL deja un proceso de WSL oculto
+para que la distro no se apague al cerrar la terminal; `-Apagar` lo termina.
+Si hay otro stack ocupando el puerto 443 (por ejemplo el de `infrastructure`),
+avisa y no levanta nada. Si PowerShell no deja correr scripts:
+`powershell -ExecutionPolicy Bypass -File .\scripts\levantar.ps1`.
 
 ### Atajo con `make` (opcional)
 
