@@ -1,4 +1,9 @@
-"""PDF text extraction."""
+"""PDF text extraction.
+
+La extraccion devuelve el contenido como Markdown: los titulos se reconstruyen
+midiendo la altura de las letras de cada linea (ver app/core/markdown.py). No
+hay un camino de texto plano: con el CRUD retirado (ADR-0008) nada lo consume.
+"""
 
 import codecs
 import ctypes
@@ -34,28 +39,11 @@ class PdfExtraction:
 
 
 def extract_pdf(source: bytes) -> PdfExtraction:
-    """Extract the plain text and the page count from PDF bytes using pypdfium2.
+    """Extract the content of PDF bytes as Markdown, and the page count.
 
     pypdfium2 envuelve PDFium (el motor de Chrome): en los PDFs de prueba
     extrae el mismo texto que pypdf entre 10 y 20 veces mas rapido, y su
     licencia (Apache/BSD) es compatible con el proyecto.
-
-    Args:
-        source: PDF file content as bytes
-
-    Returns:
-        Text of every page with normalized separation, and the page count
-
-    Raises:
-        PdfUnreadableError: If PDFium cannot open or read the document.
-    """
-    pages, page_count = _read_pages(source, lambda textpage: textpage.text().strip())
-    text = "\n\n".join(page for page in pages if page)
-    return PdfExtraction(text=text, page_count=page_count)
-
-
-def extract_pdf_markdown(source: bytes) -> PdfExtraction:
-    """Extract the content of PDF bytes as Markdown, and the page count.
 
     Ademas del texto, mide la altura de las letras de cada linea para que
     `to_markdown` reconozca los titulos.
@@ -65,11 +53,6 @@ def extract_pdf_markdown(source: bytes) -> PdfExtraction:
     """
     pages, page_count = _read_pages(source, _page_lines)
     return PdfExtraction(text=to_markdown(pages), page_count=page_count)
-
-
-def extract_pdf_text(source: bytes) -> str:
-    """Extract only the plain text from PDF bytes (see `extract_pdf`)."""
-    return extract_pdf(source).text
 
 
 class PdfExtractor(Protocol):
@@ -88,7 +71,7 @@ class PdfiumExtractor:
     """Default engine: PDFium, the fastest of the ones measured in the TP."""
 
     def extract(self, source: bytes) -> PdfExtraction:
-        return extract_pdf_markdown(source)
+        return extract_pdf(source)
 
 
 class _TextPage:
